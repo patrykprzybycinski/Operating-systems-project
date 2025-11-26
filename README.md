@@ -20,5 +20,20 @@ Każdy dron jest **utylizowany** (wycofany z eksploatacji) po określonym czasie
 
 Raport z przebiegu symulacji należy zapisać w **plikach tekstowych**.
 
----
+## Testy
+
+W projekcie planuję przeprowadzić następujące testy symulacji roju dronów:
+
+1. **Test startu i powrotu dronów do bazy**
+   - Sprawdzenie, czy drony startują z bazy i wracają po czasie T1i.
+   - Weryfikacja, że drony automatycznie wracają przy poziomie baterii ≤ 20%.
+
+2. **Test ograniczeń bazy**
+   - Symulacja sytuacji, gdy baza jest pełna (maksymalnie P dronów).
+   - Sprawdzenie, że drony czekają na wolne miejsce, zanim wleca do bazy.
+
+3. **Test utylizacji dronów**
+   - Sprawdzenie, czy drony są wycofywane z eksploatacji po osiągnięciu liczby ładowań Xi.
+
+
 
