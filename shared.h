@@ -27,4 +27,11 @@ typedef struct
     int value;
 } message_t;
 
+static void poczatek(void);
+static void utworz_nowy_semafor(void);
+static void ustaw_semafor(void);
+static void semafor_p(void);
+static void semafor_v(void);
+static void usun_semafor(void);
+
 #endif
