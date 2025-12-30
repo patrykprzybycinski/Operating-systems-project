@@ -4,34 +4,37 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/sem.h>
-#include <sys/msg.h>
+#include <sys/types.h>
 #include <signal.h>
 #include <errno.h>
+#include <time.h>
 
-#define MAX_DRONES 100
-
-typedef struct 
+struct stan 
 {
-    int current_drones;
-    int max_drones;
-    int drones_in_base;
-} shared_data_t;
+    int aktywne_drony;
+    int drony_w_bazie;
+    int max_drony;
 
-typedef struct 
-{
-    long mtype;
-    int value;
-} message_t;
+    int wejscie1; 
+    int wejscie2;
+};
 
-static void poczatek(void);
-static void utworz_nowy_semafor(void);
-static void ustaw_semafor(void);
-static void semafor_p(void);
-static void semafor_v(void);
-static void usun_semafor(void);
+extern int pamiec;
+extern char *adres;
+extern int semafor;
+
+void upd();
+void upa();
+void odlacz_pamiec();
+
+void utworz_nowy_semafor();
+void ustaw_semafor();
+void semafor_p();
+void semafor_v();
+void usun_semafor();
 
 #endif
+
