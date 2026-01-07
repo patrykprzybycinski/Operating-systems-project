@@ -1,42 +1,40 @@
 #include "shared.h"
 
+struct stan *s;
+
 int main() 
 {
-    printf("[OPERATOR] Start operatora\n");
+    printf("[OPERATOR] START\n");
 
-    int shm_id = shmget(IPC_PRIVATE, sizeof(shared_data_t), IPC_CREAT | 0600);
-    if (shm_id == -1) 
+    upd(); 
+    upa();
+    utworz_nowy_semafor();
+    ustaw_semafor();
+
+    s = (struct stan *)adres;
+
+    semafor_p();
+    s->aktywne_drony = N;
+    s->drony_w_bazie = 0;
+    s->max_drony = P;
+    semafor_v();
+
+    for (int i = 0; i < N; i++) 
     {
-        perror("shmget");
-        exit(1);
-    }
-
-    shared_data_t *data = shmat(shm_id, NULL, 0);
-    if (data == (void *)-1) 
-    {
-        perror("shmat");
-        exit(1);
-    }
-
-    data->current_drones = 0;
-    data->max_drones = 5;
-    data->drones_in_base = 0;
-
-    printf("[OPERATOR] Pamięć dzielona utworzona\n");
-
-    pid_t pid = fork();
-    if (pid == 0) 
-    {
-        execl("./dron", "dron", NULL);
-        perror("exec dron");
-        exit(1);
+        if (fork() == 0) 
+        {
+            execl("./dron", "dron", NULL);
+            exit(1);
+        }
+        usleep(300000);
     }
 
     while (1) 
     {
         sleep(5);
-        printf("[OPERATOR] Aktywne drony: %d\n", data->current_drones);
-    }
+        semafor_p();
 
-    return 0;
+        printf("[OPERATOR] aktywne=%d baza=%d max=%d\n", s->aktywne_drony, s->drony_w_bazie, s->max_drony);
+        semafor_v();
+    }
 }

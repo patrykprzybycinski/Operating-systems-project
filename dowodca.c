@@ -1,29 +1,21 @@
 #include "shared.h"
 
+pid_t operator_pid;
+
 int main() 
 {
-    printf("[DOWODCA] Uruchomiono dowódce\n");
+    printf("[DOWODCA] START\n");
 
-    pid_t pid = fork();
-
-    if (pid < 0) 
-    {
-        perror("fork");
-        exit(1);
-    }
-
-    if (pid == 0) 
+    operator_pid = fork();
+    if (operator_pid == 0) 
     {
         execl("./operator", "operator", NULL);
-        perror("exec operator");
         exit(1);
     }
 
     while (1) 
     {
-        sleep(5);
-        printf("[DOWODCA] System działa...\n");
+        sleep(15);
+        printf("[DOWODCA] system działa\n");
     }
-
-    return 0;
 }
