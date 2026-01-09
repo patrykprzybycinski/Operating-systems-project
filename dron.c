@@ -3,10 +3,10 @@
 typedef enum {
     LOT,
     POWROT,
+    LADOWANIE
 } stan_drona_t;
 
-int main() 
-{
+int main() {
     srand(getpid());
 
     int T1 = rand() % 5 + 3;          
@@ -18,6 +18,7 @@ int main()
     if (drain < 1) drain = 1;
 
     int bateria = 100;
+    int ladowania = 0;
     int powrot_pozostalo = 0;
 
     stan_drona_t stan = LOT;
@@ -74,10 +75,10 @@ int main()
 
             if (bateria < 0) bateria = 0;
 
-            printf("[DRON %d] POWROT | bateria=%d%% | pozostalo=%ds\n", getpid(), bateria, powrot_pozostalo);
+            printf("[DRON %d] POWROT | bateria=%d%% | pozostalo=%ds\n",
+                   getpid(), bateria, powrot_pozostalo);
 
-            if (bateria <= 0) 
-            {
+            if (bateria <= 0) {
                 semafor_p();
                 s->aktywne_drony--;
                 semafor_v();
@@ -97,6 +98,8 @@ int main()
                     semafor_v();
 
                     printf("[DRON %d] >>> DOTARL DO BAZY\n", getpid());
+                    stan = LADOWANIE;
+
                 } 
                 else 
                 {
@@ -105,6 +108,34 @@ int main()
                     
                 }
             }
-        }  
+        }
+
+        else if (stan == LADOWANIE) 
+        {
+
+            printf("[DRON %d] <<< LADOWANIE (%ds)\n", getpid(), T1);
+            sleep(T1);
+
+            bateria = 100;
+            ladowania++;
+
+            semafor_p();
+            s->drony_w_bazie--;
+            semafor_v();
+
+            printf("[DRON %d] <<< WYLOT Z BAZY | bateria=100%% | ladowania=%d\n", getpid(), ladowania);
+
+            if (ladowania >= XI) 
+            {
+                semafor_p();
+                s->aktywne_drony--;
+                semafor_v();
+
+                printf("[DRON %d] XXX UTYLIZACJA (Xi=%d)\n", getpid(), XI);
+                exit(0);
+            }
+
+            stan = LOT;
+        }
     }
 }

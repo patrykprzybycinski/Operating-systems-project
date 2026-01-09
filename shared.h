@@ -12,6 +12,12 @@
 #include <errno.h>
 #include <time.h>
 
+#define N 3
+#define MAX_N (2 * N)
+#define P ( N / 2)
+#define TK 6 
+#define XI 3   
+
 struct stan 
 {
     int aktywne_drony;
