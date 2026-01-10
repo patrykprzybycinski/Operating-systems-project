@@ -6,10 +6,20 @@ typedef enum {
     LADOWANIE
 } stan_drona_t;
 
-int main() {
+volatile sig_atomic_t atak = 0;
+
+void sig_atak(int sig)
+{
+    atak = 1;
+}
+
+int main() 
+{
     srand(getpid());
 
-    int T1 = rand() % 5 + 3;          
+    signal(SIGTERM, sig_atak);
+
+    int T1 = rand() % 10 + 10;          
     int T2 = (int)(2.5 * T1);         
     int T_return = (int)(0.2 * T2);   
     if (T_return < 1) T_return = 1;
@@ -27,6 +37,7 @@ int main() {
     upa();
 
     semafor = semget(130, 1, 0);
+
     if (semafor == -1) 
     {
         perror("semget dron");
@@ -39,6 +50,23 @@ int main() {
 
     while (1) 
     {
+        if (atak)
+        {
+            if (bateria >= 20)
+            {
+                semafor_p();
+                s->aktywne_drony--;
+                semafor_v();
+
+                printf("[DRON %d] !!! ATAK SAMOBOJCZY\n", getpid());
+                exit(0);
+            }
+            else
+            {
+                printf("[DRON %d] ATAK ZIGNOROWANY (bateria < 20%%)\n", getpid());
+                atak = 0;
+            }
+        }
 
         if (stan == LOT) 
         {
@@ -68,17 +96,16 @@ int main() {
 
         else if (stan == POWROT) 
         {
-
             sleep(1);
             bateria -= drain;
             powrot_pozostalo--;
 
             if (bateria < 0) bateria = 0;
 
-            printf("[DRON %d] POWROT | bateria=%d%% | pozostalo=%ds\n",
-                   getpid(), bateria, powrot_pozostalo);
+            printf("[DRON %d] POWROT | bateria=%d%% | pozostalo=%ds\n", getpid(), bateria, powrot_pozostalo);
 
-            if (bateria <= 0) {
+            if (bateria <= 0) 
+            {
                 semafor_p();
                 s->aktywne_drony--;
                 semafor_v();
@@ -89,30 +116,25 @@ int main() {
 
             if (powrot_pozostalo <= 0) 
             {
-
                 semafor_p();
-                if (s->drony_w_bazie < s->max_drony) 
+                if (s->drony_w_bazie < P) 
                 {
-
                     s->drony_w_bazie++;
                     semafor_v();
 
                     printf("[DRON %d] >>> DOTARL DO BAZY\n", getpid());
                     stan = LADOWANIE;
-
                 } 
                 else 
                 {
                     semafor_v();
                     printf("[DRON %d] !!! POD BAZA – BRAK MIEJSC\n", getpid());
-                    
                 }
             }
         }
 
         else if (stan == LADOWANIE) 
         {
-
             printf("[DRON %d] <<< LADOWANIE (%ds)\n", getpid(), T1);
             sleep(T1);
 

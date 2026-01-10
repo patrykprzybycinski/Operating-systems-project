@@ -29,7 +29,11 @@ void semafor_p()
     if (semop(semafor, &b, 1) == -1) 
     {
         if (errno == EINTR) semafor_p();
-        else { perror("semop P"); exit(1); }
+        
+        else 
+        { 
+            perror("semop P"); exit(1); 
+        }
     }
 }
 
