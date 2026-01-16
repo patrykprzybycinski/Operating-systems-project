@@ -41,6 +41,11 @@ void ustaw_semafor();
 void semafor_p();
 void semafor_v();
 void usun_semafor();
+void blad(const char *msg);
+void podlacz_pamiec();
+
+void log_init(const char *filename);
+void log_msg(const char *msg);
+void log_close();
 
 #endif
-
