@@ -4,6 +4,8 @@ pid_t operator_pid;
 
 int main()
 {
+    remove("system.log");
+
     srand(time(NULL));
 
     log_init("system.log");

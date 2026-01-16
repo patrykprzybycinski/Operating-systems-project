@@ -32,5 +32,6 @@ void log_close()
     if (log_file)
     {
         fclose(log_file);
+        log_file = NULL;
     }
 }

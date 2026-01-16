@@ -116,6 +116,30 @@ void sig_minus(int sig)
     semafor_v();
 }
 
+void cleanup(int sig)
+{
+    char buf[128];
+
+    sprintf(buf, "[OPERATOR] ZAKONCZENIE PROGRAMU (sygnal %d)\n", sig);
+    log_msg(buf);
+
+    for (int i = 0; i < liczba_dronow; i++)
+    {
+        kill(drony[i], SIGTERM);
+    }
+
+    sleep(1); 
+
+    usun_semafor();
+    odlacz_pamiec();
+
+    log_msg("[OPERATOR] USUNIETO SEMAFOR I PAMIEC DZIELONA\n");
+
+    log_close();
+    exit(0);
+}
+
+
 int main()
 {
     char buf[128];
@@ -123,6 +147,8 @@ int main()
 
     srand(time(NULL));
     log_init("system.log");
+
+    signal(SIGINT, cleanup);
 
     printf("[OPERATOR] START\n");
     log_msg("[OPERATOR] START\n");
