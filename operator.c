@@ -69,7 +69,7 @@ void sig_plus(int sig)
     char buf[128];
 
     semafor_p();
-    s->max_drony = 2 * N;
+    s->max_drony = 2 * s->N;
     semafor_v();
 
     printf("[OPERATOR] !!! DODANO PLATFORMY (max=%d)\n", s->max_drony);
@@ -139,7 +139,6 @@ void cleanup(int sig)
     exit(0);
 }
 
-
 int main()
 {
     char buf[128];
@@ -171,9 +170,9 @@ int main()
     s = (struct stan *)adres;
 
     semafor_p();
-    s->aktywne_drony = 0;
-    s->drony_w_bazie = 0;
-    s->max_drony = N;
+    int N = s->N;
+    int P = s->P;
+    int TK = s->Tk;
     semafor_v();
 
     for (int i = 0; i < N; i++)

@@ -12,11 +12,6 @@
 #include <errno.h>
 #include <time.h>
 
-#define N 3
-#define MAX_N (2 * N)
-#define P ( N / 2)
-#define TK 6 
-#define XI 3   
 
 struct stan 
 {
@@ -24,9 +19,15 @@ struct stan
     int drony_w_bazie;
     int max_drony;
 
-    int wejscie1; 
+    int N;
+    int P;
+    int Tk;
+    int XI;
+
+    int wejscie1;
     int wejscie2;
 };
+
 
 extern int pamiec;
 extern char *adres;

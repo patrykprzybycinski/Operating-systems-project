@@ -16,7 +16,7 @@ void sig_atak(int sig)
 
 int main() 
 {
-    char buf[128];   /* JEDYNY BUFOR */
+    char buf[128];  
     buf[0] = '\0';
 
     srand(getpid());
@@ -57,6 +57,13 @@ int main()
     }
 
     struct stan *s = (struct stan *)adres;
+
+    int P, XI;
+    semafor_p();
+    P = s->P;
+    XI = s->XI;
+    semafor_v();
+
 
     printf("[DRON %d] START | T1=%ds T2=%ds T_return=%ds drain=%d%%/s\n", getpid(), T1, T2, T_return, drain);
 
