@@ -6,7 +6,7 @@ struct stan *s;
 pid_t drony[100];
 int liczba_dronow = 0;
 
-void sprzatnij_drony()
+void sprzatnij_drony(int sig)
 {
     int status;
     pid_t pid;
@@ -83,7 +83,7 @@ void sig_minus(int sig)
 {
     char buf[128];
 
-    sprzatnij_drony();
+    sprzatnij_drony(0);
 
     int do_usuniecia = liczba_dronow / 2;
 
@@ -147,6 +147,16 @@ int main()
     srand(time(NULL));
     log_init("system.log");
 
+    struct sigaction sa;
+    sa.sa_handler = sprzatnij_drony;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART | SA_NOCLDSTOP;
+    if (sigaction(SIGCHLD, &sa, NULL) == -1) 
+    {
+        perror("sigaction SIGCHLD");
+        exit(1);
+    }
+
     signal(SIGINT, cleanup);
 
     printf("[OPERATOR] START\n");
@@ -184,8 +194,7 @@ int main()
     while (1)
     {
         sleep(TK);
-        sprzatnij_drony();
-
+        
         semafor_p();
         int aktywne = s->aktywne_drony;
         int max = s->max_drony;
