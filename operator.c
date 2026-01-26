@@ -3,8 +3,49 @@
 
 struct stan *s;
 
-pid_t drony[100];
+pid_t *drony = NULL;
 int liczba_dronow = 0;
+int pojemnosc_dronow = 0;
+
+void przekaz_atak(int sig)
+{
+    if (liczba_dronow > 0)
+    {
+        int index = rand() % liczba_dronow;
+        pid_t wybrany_dron = drony[index];
+        
+        semafor_p();
+        if (s->max_drony > 0) 
+        {
+            s->max_drony--; 
+        }
+        semafor_v();
+
+        printf("[OPERATOR] Przekazuje rozkaz ataku do drona PID=%d (limit zmniejszony do %d)\n", wybrany_dron, s->max_drony);
+        log_msg("[OPERATOR] Przekazanie SIGTERM i redukcja max_drony\n");
+        
+        kill(wybrany_dron, SIGTERM);
+    }
+}
+
+void alokacja_dronow()
+{
+    if (liczba_dronow < pojemnosc_dronow)
+        return;
+
+    int nowa = (pojemnosc_dronow == 0) ? 16 : pojemnosc_dronow * 2;
+
+    pid_t *tmp = realloc(drony, nowa * sizeof(pid_t));
+    if (!tmp)
+    {
+        perror("realloc drony");
+        exit(1);
+    }
+
+    drony = tmp;
+    pojemnosc_dronow = nowa;
+}
+
 
 void sprzatnij_drony(int sig)
 {
@@ -51,6 +92,7 @@ void stworz_drona()
         exit(1);
     }
 
+    alokacja_dronow();
     drony[liczba_dronow++] = pid;
 
     semafor_p();
@@ -86,6 +128,10 @@ void sig_minus(int sig)
     sprzatnij_drony(0);
 
     int do_usuniecia = liczba_dronow / 2;
+    if (do_usuniecia == 0 && liczba_dronow > 0) 
+    {
+        do_usuniecia = 1;
+    }
 
     printf("[OPERATOR] !!! USUWANIE PLATFORM (-%d DRONOW)\n", do_usuniecia);
 
@@ -114,6 +160,12 @@ void sig_minus(int sig)
     semafor_p();
     s->max_drony = liczba_dronow;
     semafor_v();
+
+    if (liczba_dronow == 0) 
+    {
+        printf("[OPERATOR] !!! LICZBA PLATFORM OSIAGNELA ZERO\n");
+    }
+
 }
 
 void cleanup(int sig)
@@ -128,7 +180,9 @@ void cleanup(int sig)
         kill(drony[i], SIGTERM);
     }
 
-    sleep(1); 
+    free(drony);
+    drony = NULL;
+    pojemnosc_dronow = 0;
 
     usun_semafor();
     odlacz_pamiec();
@@ -162,15 +216,23 @@ int main()
     printf("[OPERATOR] START\n");
     log_msg("[OPERATOR] START\n");
 
-    if (signal(SIGUSR1, sig_plus) == SIG_ERR)
-    {
-        perror("signal SIGUSR1");
-    }
+    struct sigaction sa_p;
+    sa_p.sa_handler = sig_plus;
+    sigemptyset(&sa_p.sa_mask);
+    sa_p.sa_flags = 0; 
+    sigaction(SIGUSR1, &sa_p, NULL);
 
-    if (signal(SIGUSR2, sig_minus) == SIG_ERR)
-    {
-        perror("signal SIGUSR2");
-    }
+    struct sigaction sa_m;
+    sa_m.sa_handler = sig_minus;
+    sigemptyset(&sa_m.sa_mask);
+    sa_m.sa_flags = 0; 
+    sigaction(SIGUSR2, &sa_m, NULL);
+
+    struct sigaction sa_a;
+    sa_a.sa_handler = przekaz_atak;
+    sigemptyset(&sa_a.sa_mask);
+    sa_a.sa_flags = 0;
+    sigaction(SIGWINCH, &sa_a, NULL);
 
     upd();
     upa();
@@ -188,36 +250,54 @@ int main()
     for (int i = 0; i < N; i++)
     {
         stworz_drona();
-        usleep(300000);
     }
+
+    unsigned int pozostalo_sekund = TK;
 
     while (1)
     {
-        sleep(TK);
-        
+        pozostalo_sekund = sleep(pozostalo_sekund);
+
         semafor_p();
-        int aktywne = s->aktywne_drony;
-        int max = s->max_drony;
-        int w_bazie = s->drony_w_bazie;
+        int aktualne_max = s->max_drony;
+        int aktualne_aktywne = s->aktywne_drony;
         semafor_v();
 
-        if (aktywne < max && w_bazie < P)
+        if (aktualne_max <= 0 && aktualne_aktywne <= 0)
         {
-            printf("[OPERATOR] >>> UZUPELNIANIE: %d -> %d\n", aktywne, aktywne + 1);
-
-            sprintf(buf, "[OPERATOR] >>> UZUPELNIANIE: %d -> %d\n", aktywne, aktywne + 1);
-            log_msg(buf);
-            buf[0] = '\0';
-
-            stworz_drona();
+            printf("\n[OPERATOR] ########################################\n");
+            printf("[OPERATOR] !!! BRAK DOSTEPNYCH PLATFORM I DRONOW !!!\n");
+            printf("[OPERATOR] !!! ZAMYKANIE SYSTEMU PRZEZ OPERATORA !!!\n");
+            printf("[OPERATOR] ########################################\n\n");
+            log_msg("[OPERATOR] Koniec symulacji - max_drony = 0\n");
+            
+            cleanup(0); 
         }
 
-        semafor_p();
-        printf("[OPERATOR] STATUS: aktywne=%d baza=%d max=%d\n", s->aktywne_drony, s->drony_w_bazie, s->max_drony);
+        if (pozostalo_sekund == 0)
+        {
+            semafor_p();
+            int aktywne = s->aktywne_drony;
+            int max = s->max_drony;
+            int w_bazie = s->drony_w_bazie;
+            int limit_P = s->P;
+            semafor_v();
 
-        sprintf(buf, "[OPERATOR] STATUS: aktywne=%d baza=%d max=%d\n", s->aktywne_drony, s->drony_w_bazie, s->max_drony);
-        log_msg(buf);
-        buf[0] = '\0';
-        semafor_v();
+            if (aktywne < max && w_bazie < limit_P)
+            {
+                printf("[OPERATOR] >>> UZUPELNIANIE: %d -> %d\n", aktywne, aktywne + 1);
+                sprintf(buf, "[OPERATOR] >>> UZUPELNIANIE: %d -> %d\n", aktywne, aktywne + 1);
+                log_msg(buf);
+                stworz_drona();
+            }
+
+            pozostalo_sekund = TK;
+
+            semafor_p();
+            printf("[OPERATOR] STATUS: aktywne=%d baza=%d max=%d\n", s->aktywne_drony, s->drony_w_bazie, s->max_drony);
+            sprintf(buf, "[OPERATOR] STATUS: aktywne=%d baza=%d max=%d\n", s->aktywne_drony, s->drony_w_bazie, s->max_drony);
+            log_msg(buf);
+            semafor_v();
+        }
     }
 }

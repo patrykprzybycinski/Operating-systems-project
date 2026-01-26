@@ -22,9 +22,15 @@ int main()
     srand(getpid());
     log_init("system.log");
 
-    if (signal(SIGTERM, sig_atak) == SIG_ERR)
+    struct sigaction sa;
+    sa.sa_handler = sig_atak;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+
+    if (sigaction(SIGTERM, &sa, NULL) == -1) 
     {
-        perror("signal SIGTERM");
+        perror("sigaction SIGTERM");
+        exit(1);
     }
 
     int T1 = rand() % 10 + 10;          
@@ -103,10 +109,7 @@ int main()
 
         if (stan == LOT) 
         {
-            if (sleep(1) != 0 && errno == EINTR)
-            {
-                perror("sleep");
-            }
+            sleep(1);
 
             bateria -= drain;
             if (bateria < 0) bateria = 0;
@@ -146,10 +149,7 @@ int main()
         }
         else if (stan == POWROT) 
         {
-            if (sleep(1) != 0 && errno == EINTR)
-            {
-                perror("sleep");
-            }
+            sleep(1);
 
             bateria -= drain;
             powrot_pozostalo--;
@@ -213,9 +213,11 @@ int main()
             log_msg(buf);
             buf[0] = '\0';
 
-            if (sleep(T1) != 0 && errno == EINTR)
+           unsigned int left = sleep(T1);
+            
+            if (left > 0 && atak) 
             {
-                perror("sleep T1");
+                continue; 
             }
 
             bateria = 100;

@@ -1,6 +1,19 @@
 #include "shared.h"
+#include <sys/wait.h>
 
 pid_t operator_pid;
+
+void obsluga_zakonczenia_operatora(int sig)
+{
+    int status;
+    pid_t pid = waitpid(-1, &status, WNOHANG);
+    if (pid > 0) 
+    {
+        printf("\n[DOWODCA] Odebrano sygnał zakończenia od Operatora (PID: %d).\n", pid);
+        printf("[DOWODCA] System został zamknięty poprawnie.\n");
+        exit(0);
+    }
+}
 
 int wczytaj_int(const char *opis, int min, int max)
 {
@@ -27,14 +40,13 @@ int wczytaj_int(const char *opis, int min, int max)
     }
 }
 
-
 int main()
 {
     remove("system.log");
 
     printf("[DOWODCA] KONFIGURACJA SYSTEMU\n");
 
-    int N = wczytaj_int("Podaj N (liczba dronów)", 1, 100);
+    int N = wczytaj_int("Podaj N (liczba dronów)", 1, 10000);
     int P = wczytaj_int("Podaj P (pojemność bazy)", 1, (N/2));
     int Tk = wczytaj_int("Podaj Tk (czas uzupełniania)", 1, 60);
     int XI = wczytaj_int("Podaj Xi (liczba ładowań)", 1, 10);
@@ -78,49 +90,56 @@ int main()
         exit(1);
     }
 
+    struct sigaction sa_exit;
+    sa_exit.sa_handler = obsluga_zakonczenia_operatora;
+    sigemptyset(&sa_exit.sa_mask);
+    sa_exit.sa_flags = SA_RESTART | SA_NOCLDSTOP;
+    if (sigaction(SIGCHLD, &sa_exit, NULL) == -1) 
+    {
+        perror("sigaction SIGCHLD");
+        exit(1);
+    }
+
+    printf("\n=== SYSTEM STEROWANIA DRONAMI ===\n");
+    printf("1 - [SIGUSR1] Rozbudowa platform (max drony x2)\n");
+    printf("2 - [SIGUSR2] Redukcja platform (liczba dronow -50%%)\n");
+    printf("3 - [SIGWINCH] Atak samobójczy (losowy dron)\n");
+    printf("q - Zakoncz symulacje\n");
+    printf("=================================\n");
+
+    int wybor;
     while (1)
     {
-        if (sleep(rand() % 5 + 5) != 0 && errno == EINTR)
+        printf("\nDecyzja dowodcy > ");
+        fflush(stdout);
+
+        wybor = getchar();
+        if (wybor == '\n') continue;
+        while (getchar() != '\n'); 
+
+        if (wybor == '1')
         {
-            perror("sleep");
+            printf("[DOWODCA] Rozkaz: ROZBUDOWA\n");
+            log_msg("[DOWODCA] Sygnal ROZBUDOWA (manual)\n");
+            kill(operator_pid, SIGUSR1);
         }
-
-        int decyzja = rand() % 4;
-
-        if (decyzja == 1)
+        else if (wybor == '2')
         {
-            printf("[DOWODCA] >>> ROZBUDOWA PLATFORM\n");
-            log_msg("[DOWODCA] >>> ROZBUDOWA PLATFORM\n");
-
-            if (kill(operator_pid, SIGUSR1) == -1)
-            {
-                perror("kill SIGUSR1");
-            }
+            printf("[DOWODCA] Rozkaz: REDUKCJA\n");
+            log_msg("[DOWODCA] Sygnal REDUKCJA (manual)\n");
+            kill(operator_pid, SIGUSR2);
         }
-        else if (decyzja == 2)
+        else if (wybor == '3')
         {
-            printf("[DOWODCA] >>> REDUKCJA PLATFORM\n");
-            log_msg("[DOWODCA] >>> REDUKCJA PLATFORM\n");
-
-            if (kill(operator_pid, SIGUSR2) == -1)
-            {
-                perror("kill SIGUSR2");
-            }
+            printf("[DOWODCA] Rozkaz: ATAK SAMOBOJCZY\n");
+            log_msg("[DOWODCA] Sygnal ATAK (manual)\n");
+            kill(operator_pid, SIGWINCH); 
         }
-        else if (decyzja == 3)
+        else if (wybor == 'q')
         {
-            printf("[DOWODCA] >>> ATAK SAMOBOJCZY\n");
-            log_msg("[DOWODCA] >>> ATAK SAMOBOJCZY\n");
-
-            if (kill(operator_pid, SIGUSR1 + 2) == -1)
-            {
-                perror("kill ATAK");
-            }
-        }
-        else
-        {
-            printf("[DOWODCA] ... brak decyzji\n");
-            log_msg("[DOWODCA] ... brak decyzji\n");
+            printf("[DOWODCA] Konczenie symulacji...\n");
+            kill(operator_pid, SIGINT);
+            break;
         }
     }
 }
