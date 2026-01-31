@@ -270,3 +270,9 @@ Test potwierdza:
 
 ## 7. Linki do najważniejszych fragmentów kodu.
 
+- **Konfiguracja systemu i inicjalizacja mechanizmów IPC**  
+  Fragment kodu odpowiedzialny za wczytanie parametrów początkowych symulacji (N, P, Tk, Xi),
+  inicjalizację pamięci dzielonej oraz semaforów System V. W tym miejscu ustawiany jest
+  początkowy stan całego systemu oraz wartości współdzielone pomiędzy procesami.
+  👉 https://github.com/USER/REPO/blob/main/dowodca.c#LXX-LYY
+
