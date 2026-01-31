@@ -283,4 +283,32 @@ Test potwierdza:
   sterowanie przebiegiem symulacji.
   https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dowodca.c#L135-L175
 
+  - **Tworzenie i usuwanie procesów dronów**  
+  Fragment kodu odpowiedzialny za dynamiczne tworzenie procesów dronów
+  (`fork`, `execl`) oraz sprzątanie zakończonych procesów potomnych
+  przy użyciu sygnału `SIGCHLD` i funkcji `waitpid`.
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L45-L104
+
+  - **Obsługa sygnałów sterujących (rozbudowa, redukcja, atak)**  
+  Fragment kodu obsługujący sygnały sterujące wysyłane przez dowódcę.
+  Operator dynamicznie modyfikuje limity systemu oraz usuwa drony
+  poprzez wysyłanie sygnałów `SIGTERM`.
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L107-L180
+
+  - **Procedura bezpiecznego zamknięcia systemu (cleanup)**  
+  Fragment kodu realizujący uporządkowane zakończenie działania
+  operatora: zabicie wszystkich dronów, usunięcie semaforów,
+  pamięci dzielonej oraz kolejek komunikatów.
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L183-L213
+
+  - **Główna pętla operatora i logika uzupełniania floty**  
+  Fragment kodu zawierający pętlę główną operatora, odpowiedzialną
+  za kontrolę warunków zakończenia systemu oraz okresowe uzupełnianie
+  floty dronów zgodnie z limitami platform i pojemnością bazy.
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L215-L338
+
+
+
+
+
   
