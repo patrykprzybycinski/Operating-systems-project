@@ -274,5 +274,5 @@ Test potwierdza:
   Fragment kodu odpowiedzialny za wczytanie parametrów początkowych symulacji (N, P, Tk, Xi),
   inicjalizację pamięci dzielonej oraz semaforów System V. W tym miejscu ustawiany jest
   początkowy stan całego systemu oraz wartości współdzielone pomiędzy procesami.
-  👉 https://github.com/USER/REPO/blob/main/dowodca.c#LXX-LYY
+  👉 [https://github.com/USER/REPO/blob/main/dowodca.c#LXX-LYY](https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dowodca.c#L62-L105)
 
