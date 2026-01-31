@@ -274,5 +274,13 @@ Test potwierdza:
   Fragment kodu odpowiedzialny za wczytanie parametrów początkowych symulacji (N, P, Tk, Xi),
   inicjalizację pamięci dzielonej oraz semaforów System V. W tym miejscu ustawiany jest
   początkowy stan całego systemu oraz wartości współdzielone pomiędzy procesami.
-  👉 [https://github.com/USER/REPO/blob/main/dowodca.c#LXX-LYY](https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dowodca.c#L62-L105)
+  [https://github.com/USER/REPO/blob/main/dowodca.c#LXX-LYY](https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dowodca.c#L62-L105)
 
+- **Menu dowódcy i wysyłanie sygnałów sterujących**  
+  Fragment kodu odpowiedzialny za interfejs decyzyjny dowódcy. Na podstawie
+  wyboru użytkownika wysyłane są sygnały systemowe (`SIGUSR1`, `SIGUSR2`,
+  `SIGWINCH`, `SIGINT`) do procesu operatora, co umożliwia dynamiczne
+  sterowanie przebiegiem symulacji.
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dowodca.c#L135-L175
+
+  
