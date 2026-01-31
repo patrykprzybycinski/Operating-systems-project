@@ -10,7 +10,7 @@ void utworz_nowy_semafor()
         blad("ftok sem");
     }
 
-    semafor = semget(key_sem, 1, 0777 | IPC_CREAT);
+    semafor = semget(key_sem, 1, 0600 | IPC_CREAT);
     if (semafor == -1)
     {
         blad("semget");

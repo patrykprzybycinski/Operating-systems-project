@@ -47,7 +47,7 @@ int main()
     printf("[DOWODCA] KONFIGURACJA SYSTEMU\n");
 
     int N = wczytaj_int("Podaj N (liczba dronów)", 1, 10000);
-    int P = wczytaj_int("Podaj P (pojemność bazy)", 1, (N/2));
+    int P = wczytaj_int("Podaj P (pojemność bazy)", 0, (N/2));
     int Tk = wczytaj_int("Podaj Tk (czas uzupełniania)", 1, 60);
     int XI = wczytaj_int("Podaj Xi (liczba ładowań)", 1, 10);
 
