@@ -268,5 +268,5 @@ Test potwierdza:
 
 ![Test 7](test7.png)
 
-
+## 7. Linki do najważniejszych fragmentów kodu.
 
