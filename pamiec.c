@@ -1,24 +1,28 @@
 #include "shared.h"
 
+/* Identyfikator segmentu pamięci dzielonej */
 int pamiec;
+
+/* Adres przyłączonej pamięci dzielonej */
 char *adres;
 
+/* Utworzenie (lub pobranie) segmentu pamięci dzielonej */
 void upd()
 {
-    key_t key_shm = ftok("/home/inf1s-24z/przybycinski.patryk.155298/PROJEKT/ipc.key", 'M');
+    key_t key_shm = ftok("/home/inf1s-24z/przybycinski.patryk.155298/PROJEKT2/ipc.key", 'M');
     if (key_shm == -1)
     {
         blad("ftok shm");
     }
 
-    pamiec = shmget(key_shm, 256, 0777 | IPC_CREAT);
+    pamiec = shmget(key_shm, 256, 0600 | IPC_CREAT);
     if (pamiec == -1)
     {
         blad("shmget");
     }
 }
 
-
+/* Przyłączenie pamięci dzielonej do przestrzeni adresowej procesu */
 void upa()
 {
     adres = (char *)shmat(pamiec, NULL, 0);
@@ -28,7 +32,7 @@ void upa()
     }
 }
 
-
+/* Odłączenie i usunięcie pamięci dzielonej */
 void odlacz_pamiec()
 {
     if (shmdt(adres) == -1)
@@ -42,9 +46,10 @@ void odlacz_pamiec()
     }
 }
 
+/* Podłączenie do już istniejącej pamięci dzielonej */
 void podlacz_pamiec()
 {
-    key_t key_shm = ftok("/home/inf1s-24z/przybycinski.patryk.155298/PROJEKT/ipc.key", 'M');
+    key_t key_shm = ftok("/home/inf1s-24z/przybycinski.patryk.155298/PROJEKT2/ipc.key", 'M');
     if (key_shm == -1)
     {
         perror("ftok shm");
@@ -56,7 +61,6 @@ void podlacz_pamiec()
     {
         blad("shmget attach");
     }
-
 
     upa();
 }
