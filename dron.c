@@ -122,7 +122,7 @@ int main()
     time_t ostatnia_sekunda = time(NULL); // Zmienna do odmierzania interwałów 1s
     time_t czas_startu_ladowania = 0;
 
-   while (1) 
+    while (1) 
     {
         time_t teraz = time(NULL);
 
