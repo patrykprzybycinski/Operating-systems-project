@@ -1,66 +1,67 @@
 #include "shared.h"
 
-/* Identyfikator segmentu pamięci dzielonej */
+/* ID segmentu pamięci dzielonej nadane przez kernel */
 int pamiec;
 
-/* Adres przyłączonej pamięci dzielonej */
+/* Adres segmentu pamięci w przestrzeni procesu */
 char *adres;
 
-/* Utworzenie (lub pobranie) segmentu pamięci dzielonej */
+/* Tworzy lub pobiera segment pamięci dzielonej */
 void upd()
 {
+    /* Generuje wspólny klucz IPC na podstawie pliku i znaku */
     key_t key_shm = ftok("/home/inf1s-24z/przybycinski.patryk.155298/PROJEKT2/ipc.key", 'M');
-    if (key_shm == -1)
-    {
-        blad("ftok shm");
-    }
 
+    /* Jeśli nie udało się wygenerować klucza, kończymy program */
+    if (key_shm == -1)
+        blad("ftok shm");
+
+    /* Tworzy segment pamięci lub pobiera istniejący */
     pamiec = shmget(key_shm, 256, 0600 | IPC_CREAT);
+
+    /* Sprawdzenie błędu utworzenia segmentu */
     if (pamiec == -1)
-    {
         blad("shmget");
-    }
 }
 
-/* Przyłączenie pamięci dzielonej do przestrzeni adresowej procesu */
+/* Podłącza pamięć dzieloną do procesu */
 void upa()
 {
+    /* Mapuje segment pamięci do przestrzeni adresowej procesu */
     adres = (char *)shmat(pamiec, NULL, 0);
-    if (adres == (char *)(-1)) 
-    {
+
+    /* Sprawdzenie poprawności podłączenia */
+    if (adres == (char *)(-1))
         blad("shmat");
-    }
 }
 
-/* Odłączenie i usunięcie pamięci dzielonej */
+/* Odłącza pamięć od procesu i zgłasza ją do usunięcia */
 void odlacz_pamiec()
 {
-    if (shmdt(adres) == -1)
-    {
-        perror("shmdt");
-    }
+    /* Odłączenie pamięci od przestrzeni adresowej procesu */
+    shmdt(adres);
 
-    if (shmctl(pamiec, IPC_RMID, 0) == -1)
-    {
-        perror("shmctl IPC_RMID");
-    }
+    /* Oznaczenie segmentu do usunięcia po odłączeniu wszystkich procesów */
+    shmctl(pamiec, IPC_RMID, 0);
 }
 
-/* Podłączenie do już istniejącej pamięci dzielonej */
+/* Dołącza proces do już istniejącej pamięci dzielonej */
 void podlacz_pamiec()
 {
+    /* Generuje ten sam klucz IPC co proces tworzący pamięć */
     key_t key_shm = ftok("/home/inf1s-24z/przybycinski.patryk.155298/PROJEKT2/ipc.key", 'M');
+
+    /* Błąd generowania klucza */
     if (key_shm == -1)
-    {
-        perror("ftok shm");
-        exit(1);
-    }
+        blad("ftok shm");
 
+    /* Pobranie ID istniejącego segmentu pamięci */
     pamiec = shmget(key_shm, 256, 0);
-    if (pamiec == -1)
-    {
-        blad("shmget attach");
-    }
 
+    /* Sprawdzenie błędu pobrania segmentu */
+    if (pamiec == -1)
+        blad("shmget attach");
+
+    /* Podłączenie pamięci do procesu */
     upa();
 }

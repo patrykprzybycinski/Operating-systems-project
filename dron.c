@@ -253,11 +253,14 @@ int main()
                     // Próba pobrania żetonu (wejścia). IPC_NOWAIT sprawia, że dron nie stoi w miejscu
                     if (msgrcv(msg_id, &m, sizeof(int), 0, IPC_NOWAIT) == -1) 
                     {
-                        if (errno == ENOMSG) {
+                        if (errno == ENOMSG) 
+                        {
                             // Obie bramki zajęte - dron musi krążyć kolejną sekundę
                             printf("[DRON %d] !!! WEJŚCIA ZAJĘTE - KRĄŻĘ (bateria: %d%%)\n", getpid(), bateria);
                             continue; 
-                        } else {
+                        } 
+                        else 
+                        {
                             perror("Błąd msgrcv");
                             continue;
                         }
@@ -306,7 +309,8 @@ int main()
                     
                     bateria -= drain;  // Utrata baterii przy krążeniu nad bazą
                     
-                    if (bateria <= 0) {
+                    if (bateria <= 0) 
+                    {
                         semafor_p();
                         s->aktywne_drony--;
                         semafor_v();
