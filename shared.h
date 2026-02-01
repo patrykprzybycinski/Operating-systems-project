@@ -37,8 +37,7 @@ struct stan
     int Tk;              /* czas uzupełniania */
     int XI;              /* maksymalna liczba ładowań */
 
-    int wejscie1;
-    int wejscie2;
+    pid_t cel_ataku;     /* Cel ataku ( Sygnal 3)*/
 };
 
 /* Zmienne IPC współdzielone między plikami */

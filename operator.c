@@ -7,18 +7,56 @@ pid_t *drony = NULL;     // Dynamiczna tablica przechowująca PID-y aktywnych dr
 int liczba_dronow = 0;   // Aktualna liczba dronów w systemie
 int pojemnosc_dronow = 0; // Rozmiar zaalokowanej tablicy drony
 
-/* Funkcja przekazująca rozkaz ataku wybranemu losowo dronowi (obsługa SIGWINCH) */
+/* Funkcja obsługująca sygnał SIGWINCH - przekazanie rozkazu ataku do konkretnego drona */
 void przekaz_atak(int sig)
 {
-    if (liczba_dronow > 0)
+    char buf[128]; // Lokalny bufor na tekst do pliku logów
+
+    semafor_p(); 
+    pid_t wybrany_dron = s->cel_ataku; // Pobranie PID celu zapisanego przez Dowódcę
+    semafor_v(); 
+
+    // Sprawdzenie, czy odczytany PID jest prawidłowy
+    if (wybrany_dron > 0)
     {
-        int index = rand() % liczba_dronow; // Losowanie drona z dostępnej listy
-        pid_t wybrany_dron = drony[index];  // Pobranie PID-u wylosowanego drona
+        printf("[OPERATOR] Przekazuje rozkaz ataku do wskazanego drona PID=%d\n", wybrany_dron);
         
-        printf("[OPERATOR] Przekazuje rozkaz ataku do drona PID=%d \n", wybrany_dron);
-        log_msg("[OPERATOR] Przekazanie SIGTERM i redukcja max_drony\n");
-        
-        kill(wybrany_dron, SIGTERM); // Wysłanie sygnału do procesu drona
+        // Przeszukiwanie listy aktywnych dronów w celu weryfikacji PID
+        int znaleziono = 0; 
+        for(int i=0; i<liczba_dronow; i++) 
+        {
+            if(drony[i] == wybrany_dron) 
+            {
+                znaleziono = 1; // Potwierdzenie obecności drona na liście operatora
+                break;
+            }
+        }
+
+        // Procedura ataku, jeśli dron o podanym PID istnieje
+        if (znaleziono) 
+        {
+            // Formatowanie i zapisanie informacji o ataku do logów systemowych
+            sprintf(buf, "[OPERATOR] ROZKAZ ATAKU DLA PID=%d\n", wybrany_dron);
+            log_msg(buf); 
+            buf[0] = '\0'; // Czyszczenie bufora pomocniczego
+
+            // Wysłanie sygnału SIGUSR1 do drona (inicjacja ataku)
+            kill(wybrany_dron, SIGUSR1);
+
+            semafor_p(); 
+            s->cel_ataku = 0; // Wyzerowanie celu w pamięci po skutecznym przekazaniu
+            semafor_v(); 
+        } 
+        else 
+        {
+            // Obsługa błędu w przypadku podania nieistniejącego PID
+            printf("[OPERATOR] BŁĄD: Dron %d nie istnieje lub nie jest aktywny!\n", wybrany_dron);
+            
+            // Rejestracja błędnej próby ataku w pliku system.log
+            sprintf(buf, "[OPERATOR] BŁĄD: Proba ataku na nieaktywny PID=%d\n", wybrany_dron);
+            log_msg(buf); 
+            buf[0] = '\0'; // Czyszczenie bufora
+        }
     }
 }
 
@@ -108,8 +146,8 @@ void sig_plus(int sig)
 {
     char buf[128];
 
-    semafor_p(); // Blokada semafora
-    s->max_drony = 2 * s->N; // Nowy limit: dwukrotność N
+    semafor_p(); // Blokada semafora na czas modyfikacji struktury
+    s->max_drony = 2 * s->N; // Nowy limit: dwukrotność parametru startowego N
     semafor_v(); // Zwolnienie semafora
 
     printf("[OPERATOR] !!! DODANO PLATFORMY (max=%d)\n", s->max_drony);
@@ -123,60 +161,58 @@ void sig_plus(int sig)
 void sig_minus(int sig)
 {
     char buf[128];
-    int stare_max;
+    int przed_redukcja;
+    int nowy_limit;
 
-    semafor_p(); // Pobranie aktualnego limitu z pamięci
-    stare_max = s->max_drony;
+    semafor_p(); // Sekcja krytyczna - musimy bezpiecznie zmodyfikować pamięć
+    
+    przed_redukcja = s->max_drony;
+    
+    // Obliczamy o ile redukujemy (połowa, ale minimum 1, jeśli cokolwiek zostało)
+    int do_redukcji = przed_redukcja / 2;
+    if (do_redukcji == 0 && przed_redukcja > 0) 
+    {
+        do_redukcji = 1;
+    }
+
+    s->max_drony -= do_redukcji;
+    if (s->max_drony < 0) s->max_drony = 0;
+    
+    nowy_limit = s->max_drony; 
     semafor_v();
 
-    if (liczba_dronow <= 0)
-    {
-        printf("[OPERATOR] !!! BRAK DRONOW DO USUNIECIA\n");
-    }
-
-    int do_usuniecia = stare_max / 2; // Obliczenie połowy limitu
-    if (do_usuniecia == 0 && stare_max > 0)
-    {
-        do_usuniecia = 1; // Zawsze usuwamy minimum jednego, jeśli limit > 0
-    }
-
-    printf("[OPERATOR] !!! USUWANIE PLATFORM (-%d DRONOW)\n", do_usuniecia);
-
-    sprintf(buf, "[OPERATOR] !!! USUWANIE PLATFORM (-%d DRONOW)\n", do_usuniecia);
+    // Logowanie i komunikacja o zmianie statusu platform
+    printf("[OPERATOR] !!! REDUKCJA PLATFORM O %d (Nowy limit: %d)\n", do_redukcji, nowy_limit);
+    sprintf(buf, "[OPERATOR] !!! REDUKCJA PLATFORM O %d (Nowy limit: %d)\n", do_redukcji, nowy_limit);
     log_msg(buf);
-    buf[0] = '\0';
 
-    int wyslane = 0;
-    // Pętla wysyłająca SIGTERM do wymaganej liczby dronów
-    for (int i = 0; i < liczba_dronow && wyslane < do_usuniecia; i++)
+    /* PROCES USYPIANIA NADMIAROWYCH DRONÓW */
+    // Blokujemy SIGCHLD, aby tablica drony[] nie zmieniała się w trakcie wysyłania sygnałów
+    sigset_t mask, oldmask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGCHLD);
+    sigprocmask(SIG_BLOCK, &mask, &oldmask);
+
+    // Zabijamy drony tak długo, aż ich liczba zrówna się z nowym limitem
+    // Idziemy od końca tablicy (najmłodsze drony)
+    while (liczba_dronow > nowy_limit)
     {
-        pid_t pid = drony[i];
-
-        if (kill(pid, SIGTERM) == -1) // Próba zakończenia procesu drona
+        pid_t pid_do_ubicia = drony[liczba_dronow - 1];
+        
+        // Wysyłamy SIGTERM - bezwarunkowy nakaz zakończenia pracy drona
+        if (kill(pid_do_ubicia, SIGTERM) == 0) 
         {
-            if (errno != ESRCH)
-                perror("kill SIGTERM");
-            continue;
+            // Zmniejszamy lokalny licznik, aby kontynuować pętlę redukcji
+            liczba_dronow--; 
+        } 
+        else 
+        {
+            // Jeśli dron już nie istnieje, pomijamy go i idziemy dalej
+            liczba_dronow--;
         }
-
-        printf("[OPERATOR] --- DRON PID=%d USUNIETY (SIGTERM)\n", pid);
-        sprintf(buf, "[OPERATOR] --- DRON PID=%d USUNIETY (SIGTERM)\n", pid);
-        log_msg(buf);
-        buf[0] = '\0';
-
-        wyslane++;
     }
-
-    semafor_p(); // Aktualizacja limitu max_drony w pamięci współdzielonej
-    s->max_drony -= do_usuniecia;
-    if (s->max_drony < 0)
-        s->max_drony = 0;
-    semafor_v();
-
-    if (s->max_drony == 0)
-    {
-        printf("[OPERATOR] !!! LICZBA PLATFORM OSIAGNELA ZERO\n");
-    }
+    
+    sigprocmask(SIG_SETMASK, &oldmask, NULL); // Przywracamy standardową obsługę SIGCHLD
 }
 
 /* Sprzątanie zasobów IPC i kończenie pracy Operatora */
@@ -187,29 +223,31 @@ void cleanup(int sig)
     sprintf(buf, "[OPERATOR] ZAKONCZENIE PROGRAMU (sygnal %d)\n", sig);
     log_msg(buf);
 
+    // Pętla kończąca wszystkie aktywne procesy dronów przed zamknięciem systemu
     for (int i = 0; i < liczba_dronow; i++)
     {
-        kill(drony[i], SIGTERM); // Wysłanie sygnału do wszystkich dzieci
+        kill(drony[i], SIGTERM); 
     }
 
-    free(drony); // Zwolnienie tablicy PID-ów
+    free(drony); // Zwolnienie pamięci dynamicznej tablicy PID-ów
     drony = NULL;
     pojemnosc_dronow = 0;
 
-    usun_semafor(); // Usunięcie semafora z systemu (IPC)
-    odlacz_pamiec(); // Odłączenie pamięci współdzielonej (shmdt)
+    usun_semafor(); // Usunięcie zestawu semaforów z pamięci systemowej
+    odlacz_pamiec(); // Odłączenie segmentu pamięci współdzielonej (shmdt)
 
     log_msg("[OPERATOR] USUNIETO SEMAFOR I PAMIEC DZIELONA\n");
 
-    if (msgctl(msg_id, IPC_RMID, NULL) == -1) // Całkowite usunięcie kolejki komunikatów
+    // Usunięcie kolejki komunikatów (bramki bazy) z systemu
+    if (msg_id != -1 && msgctl(msg_id, IPC_RMID, NULL) == -1) 
     {
         perror("Błąd usuwania kolejki"); 
     }
     
     log_msg("[OPERATOR] USUNIETO KOLEJKE KOMUNIKATOW\n");
 
-    log_close(); // Zamknięcie pliku logowania
-    exit(0); // Wyjście z procesu
+    log_close(); // Zamknięcie deskryptora pliku logowania
+    exit(0); // Zakończenie procesu operatora
 }
 
 int main()
@@ -217,21 +255,21 @@ int main()
     char buf[128];
     buf[0] = '\0';
 
-    srand(time(NULL)); // Inicjalizacja generatora liczb losowych
-    log_init("system.log"); // Start logowania
+    srand(time(NULL)); // Inicjalizacja ziarna dla liczb losowych (oparta na czasie)
+    log_init("system.log"); // Inicjalizacja zapisu do pliku system.log
 
-    // Inicjalizacja kolejki komunikatów dla bramek bazy
+    // Konfiguracja kolejki komunikatów (mechanizm bramek wejściowych bazy)
     key_t key_q = ftok("/home/inf1s-24z/przybycinski.patryk.155298/PROJEKT2/ipc.key", 'Q');
     msg_id = msgget(key_q, 0600 | IPC_CREAT); 
 
-    // Tworzenie "żetonów" wejścia (typ 1 i typ 2) do kolejki
+    // Inicjalizacja dwóch dostępnych bramek (żetonów) w kolejce
     struct msg_wejscie m1 = {1, 0}; 
     struct msg_wejscie m2 = {2, 0}; 
 
-    msgsnd(msg_id, &m1, sizeof(int), 0); // Wstawienie żetonu nr 1
-    msgsnd(msg_id, &m2, sizeof(int), 0); // Wstawienie żetonu nr 2
+    msgsnd(msg_id, &m1, sizeof(int), 0); // Dodanie bramki nr 1 do kolejki
+    msgsnd(msg_id, &m2, sizeof(int), 0); // Dodanie bramki nr 2 do kolejki
 
-    // Ustawienie obsługi SIGCHLD dla automatycznego sprzątania dronów
+    // Konfiguracja automatycznego sprzątania procesów zombie (SIGCHLD)
     struct sigaction sa;
     sa.sa_handler = sprzatnij_drony;
     sigemptyset(&sa.sa_mask);
@@ -242,12 +280,12 @@ int main()
         exit(1);
     }
 
-    signal(SIGINT, cleanup); // Rejestracja sprzątania na sygnał przerwania
+    signal(SIGINT, cleanup); // Przechwycenie Ctrl+C w celu bezpiecznego zamknięcia IPC
 
     printf("[OPERATOR] START\n");
     log_msg("[OPERATOR] START\n");
 
-    // Rejestracja sygnałów sterujących wysyłanych przez Dowódcę
+    // Rejestracja sygnałów SIGUSR1/SIGUSR2/SIGWINCH wysyłanych przez Dowódcę
     struct sigaction sa_p;
     sa_p.sa_handler = sig_plus;
     sigemptyset(&sa_p.sa_mask);
@@ -266,73 +304,86 @@ int main()
     sa_a.sa_flags = 0;
     sigaction(SIGWINCH, &sa_a, NULL);
 
-    // Inicjalizacja mechanizmów pamięci dzielonej i semaforów
-    upd(); // shmat
-    upa(); // adres
-    utworz_nowy_semafor(); // semget
-    ustaw_semafor(); // semctl
+    // Inicjalizacja połączeń z segmentem IPC (Shared Memory & Semaphores)
+    upd(); // Podłączenie segmentu pamięci
+    upa(); // Uzyskanie adresu struktury
+    utworz_nowy_semafor(); // Alokacja zestawu semaforów
+    ustaw_semafor(); // Inicjalizacja wartości semaforów
 
-    s = (struct stan *)adres; // Rzutowanie adresu pamięci na strukturę stan
+    s = (struct stan *)adres; // Powiązanie wskaźnika s ze strukturą w pamięci dzielonej
 
-    semafor_p(); // Pobranie parametrów z pamięci współdzielonej
+    // Pobranie parametrów konfiguracyjnych zapisanych przez Dowódcę
+    semafor_p(); 
     int N = s->N;
     int P = s->P;
     int TK = s->Tk;
     semafor_v();
 
-    for (int i = 0; i < N; i++) // Pętla tworząca początkową flotę N dronów
+    // Startowa generacja floty dronów (liczba N)
+    for (int i = 0; i < N; i++) 
     {
         stworz_drona();
     }
 
-    time_t nastepne_uzupelnienie = time(NULL) + TK; // Obliczenie czasu następnego spawnu
+    time_t nastepne_uzupelnienie = time(NULL) + TK; // Ustawienie harmonogramu uzupełniania floty
+    time_t ostatnia_sekunda_status = 0; // Pomocniczy zegar do logowania statusu
 
+    /* GŁÓWNA PĘTLA OPERATORA - TRYB AKTYWNEGO OCZEKIWANIA */
     while (1)
     {
-        // 1. Sprawdzanie warunku zakończenia systemu
-        semafor_p();
-        int aktualne_max = s->max_drony;
-        int aktualne_aktywne = s->aktywne_drony;
-        semafor_v();
+        time_t teraz = time(NULL);
 
-        if (aktualne_max <= 0 && aktualne_aktywne <= 0)
+        // 1. Warunek zakończenia: sprawdzenie czy zostały jeszcze platformy lub drony
+        if (teraz > ostatnia_sekunda_status) 
         {
-            printf("\n[OPERATOR] ########################################\n");
-            printf("[OPERATOR] !!! BRAK DOSTEPNYCH PLATFORM I DRONOW !!!\n");
-            printf("[OPERATOR] !!! ZAMYKANIE SYSTEMU PRZEZ OPERATORA !!!\n");
-            printf("[OPERATOR] ########################################\n\n");
-            log_msg("[OPERATOR] Koniec symulacji - max_drony = 0\n");
-            cleanup(0); // Zamknięcie całego systemu
+            semafor_p();
+            int aktualne_max = s->max_drony;
+            int aktualne_aktywne = s->aktywne_drony;
+            semafor_v();
+
+            if (aktualne_max <= 0 && aktualne_aktywne <= 0)
+            {
+                printf("\n[OPERATOR] ########################################\n");
+                printf("[OPERATOR] !!! BRAK DOSTEPNYCH PLATFORM I DRONOW !!!\n");
+                printf("[OPERATOR] !!! ZAMYKANIE SYSTEMU PRZEZ OPERATORA !!!\n");
+                printf("[OPERATOR] ########################################\n\n");
+                log_msg("[OPERATOR] Koniec symulacji - max_drony = 0\n");
+                cleanup(0); // Rozpoczęcie procedury zwalniania zasobów IPC
+            }
+            ostatnia_sekunda_status = teraz;
         }
 
-        // 2. Blok uzupełniania floty co TK sekund
-        time_t teraz = time(NULL);
+        // 2. Harmonogram uzupełniania floty co TK sekund
         if (teraz - nastepne_uzupelnienie >= TK)
         {
-            semafor_p(); // Sprawdzenie czy można dodać drona (limity platform i bazy)
+            semafor_p();
             int aktywne = s->aktywne_drony;
             int max = s->max_drony;
             int w_bazie = s->drony_w_bazie;
             int limit_P = s->P;
-            semafor_v();
 
+            // Wyświetlenie aktualnego stanu zasobów w konsoli i logach
+            printf("[OPERATOR] STATUS: aktywne=%d baza=%d max=%d\n", aktywne, w_bazie, max);
+            sprintf(buf, "[OPERATOR] STATUS: aktywne=%d baza=%d max=%d\n", aktywne, w_bazie, max);
+            log_msg(buf);
+
+            // Sprawdzenie limitów: czy mamy wolne platformy i czy baza nie jest przepełniona
             if (aktywne < max && w_bazie < limit_P)
             {
                 printf("[OPERATOR] >>> UZUPELNIANIE: %d -> %d\n", aktywne, aktywne + 1);
                 sprintf(buf, "[OPERATOR] >>> UZUPELNIANIE: %d -> %d\n", aktywne, aktywne + 1);
                 log_msg(buf);
-                stworz_drona(); // Dodanie nowej jednostki
+                
+                semafor_v(); // Zwolnienie semafora przed forkiem
+                stworz_drona();
+            }
+            else
+            {
+                semafor_v(); // Zwolnienie jeśli nie tworzymy drona
             }
 
-            nastepne_uzupelnienie = teraz; // Reset licznika czasu
-
-            semafor_p(); // Wyświetlenie i zalogowanie statusu systemu
-            printf("[OPERATOR] STATUS: aktywne=%d baza=%d max=%d\n", s->aktywne_drony, s->drony_w_bazie, s->max_drony);
-            sprintf(buf, "[OPERATOR] STATUS: aktywne=%d baza=%d max=%d\n", s->aktywne_drony, s->drony_w_bazie, s->max_drony);
-            log_msg(buf);
-            semafor_v();
+            nastepne_uzupelnienie = teraz; // Aktualizacja czasu następnej próby
         }
 
-        sleep(1); // Oczekiwanie 1 sekundy (zmniejszenie obciążenia procesora)
     }
 }

@@ -67,8 +67,8 @@ int main()
     printf("[DOWODCA] KONFIGURACJA SYSTEMU\n");
 
     // Pobranie parametrów startowych systemu
-    int N  = wczytaj_int("Podaj N (liczba dronów)", 1, 10000);   // Liczba dronów
-    int P  = wczytaj_int("Podaj P (pojemność bazy)", 0, (N/2)); // Maks. dronów w bazie
+    int N  = wczytaj_int("Podaj N (liczba dronów)", 2, 10000);   // Liczba dronów
+    int P  = wczytaj_int("Podaj P (pojemność bazy)", 1, (N/2)); // Maks. dronów w bazie
     int Tk = wczytaj_int("Podaj Tk (czas uzupełniania)", 1, 60);// Czas tworzenia nowego drona
     int XI = wczytaj_int("Podaj Xi (liczba ładowań)", 1, 10);   // Limit ładowań drona
 
@@ -136,43 +136,49 @@ int main()
     printf("1 - [SIGUSR1] Rozbudowa platform (max drony x2)\n");
     printf("2 - [SIGUSR2] Redukcja platform (liczba dronow -50%%)\n");
     printf("3 - [SIGWINCH] Atak samobójczy (losowy dron)\n");
-    printf("q - Zakoncz symulacje\n");
     printf("=================================\n");
 
     int wybor;
+    char wejscie[64]; // Bufor na komendy wpisywane z klawiatury
     while (1)
     {
         printf("\nDecyzja dowodcy > ");
-        fflush(stdout);
+        fflush(stdout); // Wymuszenie wyświetlenia promptu bez czekania na znak nowej linii
 
-        // Odczyt polecenia z klawiatury
-        wybor = getchar();
-        if (wybor == '\n') continue;
-        while (getchar() != '\n'); // Czyszczenie bufora
+        // Pobieramy całą linię (np. "3 12345"), żeby sscanf mógł to potem przemielić
+        if (fgets(wejscie, sizeof(wejscie), stdin) == NULL) continue;
 
-        if (wybor == '1')
+        if (wejscie[0] == '1') // Opcja 1: Rozbudowa platform
         {
             printf("[DOWODCA] Rozkaz: ROZBUDOWA\n");
-            log_msg("[DOWODCA] Sygnal ROZBUDOWA (manual)\n");
-            kill(operator_pid, SIGUSR1); // Sygnał do operatora: zwiększenie max_drony
+            kill(operator_pid, SIGUSR1); // Wysyłamy sygnał SIGUSR1 do procesu operatora
         }
-        else if (wybor == '2')
+        else if (wejscie[0] == '2') // Opcja 2: Redukcja platform
         {
             printf("[DOWODCA] Rozkaz: REDUKCJA\n");
-            log_msg("[DOWODCA] Sygnal REDUKCJA (manual)\n");
-            kill(operator_pid, SIGUSR2); // Sygnał do operatora: redukcja platform
+            kill(operator_pid, SIGUSR2); // Wysyłamy sygnał SIGUSR2 do procesu operatora
         }
-        else if (wybor == '3')
+        else if (wejscie[0] == '3') // Opcja 3: Atak na konkretny PID
         {
-            printf("[DOWODCA] Rozkaz: ATAK SAMOBOJCZY\n");
-            log_msg("[DOWODCA] Sygnal ATAK (manual)\n");
-            kill(operator_pid, SIGWINCH); // Sygnał do operatora: losowy atak drona
-        }
-        else if (wybor == 'q')
-        {
-            printf("[DOWODCA] Konczenie symulacji...\n");
-            kill(operator_pid, SIGINT); // Sygnał do operatora: zakończenie programu
-            break;
+            pid_t docelowy_pid;
+            // sscanf szuka wzorca: najpierw trójka, potem spacja, potem liczba (PID)
+            if (sscanf(wejscie, "3 %d", &docelowy_pid) == 1) 
+            {
+                printf("[DOWODCA] Rozkaz: ATAK SAMOBOJCZY drona %d\n", docelowy_pid);
+                
+                // SEKCJA KRYTYCZNA: Musimy zająć semafor, żeby Operator nie przeczytał 
+                // śmieci w momencie, gdy my nadpisujemy pole cel_ataku
+                semafor_p(); 
+                s->cel_ataku = docelowy_pid; // Wpisujemy PID do pamięci współdzielonej
+                semafor_v(); // Zwalniamy semafor, Operator może już bezpiecznie czytać
+                
+                kill(operator_pid, SIGWINCH); // Budzimy Operatora sygnałem SIGWINCH
+            }
+            else 
+            {
+                // Jeśli ktoś wpisze samo "3" bez PIDu
+                printf("[DOWODCA] BŁĄD: Użyj formatu '3 PID'\n");
+            }
         }
     }
 }

@@ -9,11 +9,31 @@ typedef enum
 
 volatile sig_atomic_t atak = 0; // Flaga sygnału ataku (bezpieczna dla operacji asynchronicznych)
 volatile sig_atomic_t stan_global; // Zmienna pomocnicza do śledzenia stanu w handlerze
+volatile sig_atomic_t redukcja = 0;
 
-/* Obsługa sygnału SIGTERM - ustawienie flagi ataku samobójczego */
-void sig_atak(int sig)
+/**
+ * Obsługa sygnałów sterujących życiem drona.
+ * * Wykorzystujemy zmienne typu 'volatile sig_atomic_t', aby zagwarantować, 
+ * że operacje zapisu flagi będą niepodzielne i widoczne natychmiast 
+ * w głównej pętli programu, nawet jeśli sygnał nadejdzie w trakcie 
+ * wykonywania innej instrukcji.
+ */
+void obsluga_sygnalow(int sig)
 {
-    atak = 1; // Zmiana flagi - dron sprawdzi ją w głównej pętli
+    // Sygnał SIGUSR1 jest używany do przekazania rozkazu ataku od Dowódcy.
+    // Dron ma prawo zignorować ten sygnał, jeśli poziom baterii jest zbyt niski.
+    if (sig == SIGUSR1) 
+    {
+        atak = 1; 
+    }
+
+    // Sygnał SIGTERM jest używany przez Operatora do redukcji platform.
+    // Jest to rozkaz bezwarunkowy - dron musi zwolnić miejsce w systemie 
+    // niezależnie od swojego stanu paliwa czy aktualnego zadania.
+    if (sig == SIGTERM) 
+    {
+        redukcja = 1; 
+    }
 }
 
 int main() 
@@ -26,9 +46,11 @@ int main()
 
     // Konfiguracja obsługi sygnału SIGTERM (rozkaz ataku od Operatora)
     struct sigaction sa;
-    sa.sa_handler = sig_atak;
+    sa.sa_handler = obsluga_sygnalow;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
+    sigaction(SIGUSR1, &sa, NULL); // Dla ataku
+    sigaction(SIGTERM, &sa, NULL); // Dla redukcji platform
 
     if (sigaction(SIGTERM, &sa, NULL) == -1) 
     {
@@ -43,8 +65,8 @@ int main()
     if (T_return < 1) T_return = 1;
 
     int drain = 100 / T2;                // Zużycie baterii na sekundę
-    if (drain < 1) drain = 1;
-    if (drain > 6) drain = 6;
+    if (drain < 1) drain = 1;            // Minimalne zużycie baterii
+    if (drain > 6) drain = 6;            // Maksymalne zużycie baterii
 
     int bateria = 100; // Startujemy z pełną energią
     int ladowania = 0; // Licznik cykli ładowania
@@ -71,7 +93,8 @@ int main()
 
     // Uzyskanie dostępu do kolejki komunikatów (mechanizm bramek bazy)
     key_t key_q = ftok("/home/inf1s-24z/przybycinski.patryk.155298/PROJEKT2/ipc.key", 'Q');
-    if (key_q == -1) {
+    if (key_q == -1) 
+    {
         perror("ftok msg dron");
         exit(1);
     }
@@ -86,8 +109,8 @@ int main()
 
     int P, XI;
     semafor_p(); // Pobranie limitów systemowych (sekcja krytyczna)
-    P = s->P;
-    XI = s->XI;
+    P = s->P;    // Maksymalna liczba miejsc w bazie
+    XI = s->XI;  // Limit ładowań drona
     semafor_v();
 
     printf("[DRON %d] START | T1=%ds T2=%ds T_return=%ds drain=%d%%/s\n", getpid(), T1, T2, T_return, drain);
@@ -96,8 +119,23 @@ int main()
     log_msg(buf);
     buf[0] = '\0';
 
-    while (1) 
+    time_t ostatnia_sekunda = time(NULL); // Zmienna do odmierzania interwałów 1s
+    time_t czas_startu_ladowania = 0;
+
+   while (1) 
     {
+        time_t teraz = time(NULL);
+
+        if (redukcja) // REDUKCJA - ZGINIE ZAWSZE
+        {
+            semafor_p(); // Zabezpieczenie dostępu do pamięci przy kończeniu pracy
+            if (stan_global == LADOWANIE) s->drony_w_bazie--;
+            s->aktywne_drony--;
+            semafor_v();
+            printf("[DRON %d] !!! USUNIĘTY PRZEZ REDUKCJĘ\n", getpid());
+            exit(0); // Wyjście z programu drona
+        }
+        
         /* REAKCJA NA SYGNAŁ ATAKU */
         if (atak)
         {
@@ -113,7 +151,7 @@ int main()
                 log_msg(buf);
                 exit(0); // Proces kończy życie
             }
-            
+        
             if (bateria >= 20) // Warunek wykonania ataku samobójczego
             {
                 semafor_p();
@@ -125,7 +163,7 @@ int main()
                 log_msg(buf);
                 exit(0); // Proces ginie w chwale
             }
-            else
+            else if (bateria < 20)
             {
                 printf("[DRON %d] ATAK ZIGNOROWANY (bateria < 20%%)\n", getpid());
                 sprintf(buf, "[DRON %d] ATAK ZIGNOROWANY (bateria < 20%%)\n", getpid());
@@ -137,43 +175,44 @@ int main()
         /* LOGIKA STANU: LOT (PATROL) */
         if (stan == LOT) 
         {
-            sleep(1); // Symulacja upływu sekundy lotu
-
-            bateria -= drain; // Zmniejszenie energii
-            if (bateria < 0) bateria = 0;
-
-            printf("[DRON %d] LOT | bateria=%d%%\n", getpid(), bateria);
-            sprintf(buf, "[DRON %d] LOT | bateria=%d%%\n", getpid(), bateria);
-            log_msg(buf);
-
-            if (bateria <= 20 && bateria > 0) // Krytyczny poziom baterii - powrót
+            if (teraz > ostatnia_sekunda)   // Sprawdzanie czy upłynęła pełna sekunda
             {
-                stan = POWROT;
-                stan_global = POWROT;
-                powrot_pozostalo = T_return; // Ustawienie czasu dolotu do bazy
+                bateria -= drain;  // Zużycie energii w trakcie lotu
+                if (bateria < 0) bateria = 0;
 
-                printf("[DRON %d] >>> ROZPOCZYNAM POWROT (czas=%ds)\n", getpid(), powrot_pozostalo);
-                sprintf(buf, "[DRON %d] >>> ROZPOCZYNAM POWROT (czas=%ds)\n", getpid(), powrot_pozostalo);
+                printf("[DRON %d] LOT | bateria=%d%%\n", getpid(), bateria);
+                sprintf(buf, "[DRON %d] LOT | bateria=%d%%\n", getpid(), bateria);
                 log_msg(buf);
-            }
 
-            if (bateria <= 0) // Całkowite rozładowanie w powietrzu
-            {
-                semafor_p();
-                s->aktywne_drony--;
-                semafor_v();
+                if (bateria <= 20 && bateria > 0) // Krytyczny poziom baterii - powrót
+                {
+                    stan = POWROT;
+                    stan_global = POWROT;
+                    powrot_pozostalo = T_return; // Ustawienie czasu dolotu do bazy
 
-                printf("[DRON %d] !!! ZNISZCZONY W LOCIE (bateria=0%%)\n", getpid());
-                sprintf(buf, "[DRON %d] !!! ZNISZCZONY W LOCIE (bateria=0%%)\n", getpid());
-                log_msg(buf);
-                exit(0); // Dron spada
+                    printf("[DRON %d] >>> ROZPOCZYNAM POWROT (czas=%ds)\n", getpid(), powrot_pozostalo);
+                    sprintf(buf, "[DRON %d] >>> ROZPOCZYNAM POWROT (czas=%ds)\n", getpid(), powrot_pozostalo);
+                    log_msg(buf);
+                }
+
+                if (bateria <= 0) // Całkowite rozładowanie w powietrzu
+                {
+                    semafor_p();
+                    s->aktywne_drony--;
+                    semafor_v();
+
+                    printf("[DRON %d] !!! ZNISZCZONY W LOCIE (bateria=0%%)\n", getpid());
+                    sprintf(buf, "[DRON %d] !!! ZNISZCZONY W LOCIE (bateria=0%%)\n", getpid());
+                    log_msg(buf);
+                    exit(0); // Dron spada
+                }
+                
+                ostatnia_sekunda = teraz;  // Aktualizacja czasu ostatniego spadku baterii
             }
         }
         /* LOGIKA STANU: POWRÓT DO BAZY */
         else if (stan == POWROT) 
         {
-            sleep(1);
-
             bateria -= drain; // Dron nadal zużywa energię wracając
             powrot_pozostalo--; // Zbliżanie się do bazy
 
@@ -232,7 +271,10 @@ int main()
                     semafor_p(); // LOCK - ostateczna aktualizacja stanu bazy
                     if (s->drony_w_bazie < s->P) 
                     {
-                        s->drony_w_bazie++; // Oficjalne zajęcie miejsca w bazie
+                        s->drony_w_bazie++;// Oficjalne zajęcie miejsca w bazie
+                        
+                        stan = LADOWANIE;
+                        stan_global = LADOWANIE;
                         semafor_v(); // UNLOCK
 
                         // Zwolnienie bramki (żetonu) dla innych dronów
@@ -244,8 +286,6 @@ int main()
                         sprintf(buf, "[DRON %d] >>> DOTARL DO BAZY (Wejscie %ld)\n", getpid(), nr_wejscia);
                         log_msg(buf);
 
-                        stan = LADOWANIE; // Zmiana stanu na ładowanie
-                        stan_global = LADOWANIE;
                     }
                     else 
                     {
@@ -264,8 +304,7 @@ int main()
                     // Brak miejsc w pamięci dzielonej - dron krąży i traci baterię
                     printf("[DRON %d] !!! BRAK MIEJSC W BAZIE - OCZEKIWANIE (Bateria: %d%%)\n", getpid(), bateria);
                     
-                    sleep(1);
-                    bateria -= drain; 
+                    bateria -= drain;  // Utrata baterii przy krążeniu nad bazą
                     
                     if (bateria <= 0) {
                         semafor_p();
@@ -295,7 +334,7 @@ int main()
             bateria = 100; // Akumulator pełny
             ladowania++; // Zwiększenie licznika zużycia drona
 
-            semafor_p(); // Opuszczenie bazy
+            semafor_p(); // Opuszczenie bazy - sekcja krytyczna
             s->drony_w_bazie--;
             semafor_v();
 
@@ -317,6 +356,7 @@ int main()
 
             stan = LOT; // Powrót do patrolowania
             stan_global = LOT;
+            ostatnia_sekunda = time(NULL); // Reset zegara po wylocie
         }
     }
 }
