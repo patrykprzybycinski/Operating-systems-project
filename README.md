@@ -283,72 +283,171 @@ Test potwierdza:
   sterowanie przebiegiem symulacji.
   https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dowodca.c#L135-L175
 
-- **Tworzenie i usuwanie procesów dronów**  
-  Fragment kodu odpowiedzialny za dynamiczne tworzenie procesów dronów
-  (`fork`, `execl`) oraz sprzątanie zakończonych procesów potomnych
-  przy użyciu sygnału `SIGCHLD` i funkcji `waitpid`.
-  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L45-L104
+- **Stany drona i flagi sygnałów
+  Sekcja definiuje automat skończony drona (LOT, POWRÓT, ŁADOWANIE)
+  oraz flagi typu `volatile sig_atomic_t`, używane do bezpiecznej
+  komunikacji z handlerami sygnałów.
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L1-L8
 
-- **Obsługa sygnałów sterujących (rozbudowa, redukcja, atak)**  
-  Fragment kodu obsługujący sygnały sterujące wysyłane przez dowódcę.
-  Operator dynamicznie modyfikuje limity systemu oraz usuwa drony
-  poprzez wysyłanie sygnałów `SIGTERM`.
-  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L107-L180
+- **Precyzyjny atak na wskazanego drona (SIGWINCH)
+  Handler sygnału SIGWINCH odpowiada za przekazanie rozkazu ataku
+  do konkretnego drona wskazanego przez Dowódcę w pamięci dzielonej.
+  Operator weryfikuje istnienie PID-u przed wysłaniem sygnału.
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L11-L61
+  
+- **Dynamiczna lista aktywnych dronów
+  Funkcja realizuje bezpieczne powiększanie tablicy PID-ów dronów
+  z użyciem strategii podwajania rozmiaru i realloc().
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L64-L80
 
-- **Procedura bezpiecznego zamknięcia systemu (cleanup)**  
-  Fragment kodu realizujący uporządkowane zakończenie działania
-  operatora: zabicie wszystkich dronów, usunięcie semaforów,
-  pamięci dzielonej oraz kolejek komunikatów.
-  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L183-L213
+- **Obsługa SIGCHLD i eliminacja procesów zombie
+  Handler SIGCHLD usuwa zakończone procesy dronów z listy operatora
+  przy użyciu waitpid() z flagą WNOHANG, zapobiegając powstawaniu zombie.
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L83-L109
 
-- **Główna pętla operatora i logika uzupełniania floty**  
-  Fragment kodu zawierający pętlę główną operatora, odpowiedzialną
-  za kontrolę warunków zakończenia systemu oraz okresowe uzupełnianie
-  floty dronów zgodnie z limitami platform i pojemnością bazy.
-  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L215-L338
+- **Tworzenie nowego procesu drona
+  Funkcja odpowiedzialna za tworzenie nowego drona przy pomocy fork()
+  i execl(), rejestrację PID-u oraz aktualizację stanu systemu.
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L112-L142
 
-- **Definicja stanów drona i obsługa sygnału ataku**  
-  Fragment kodu definiujący automat stanów drona (LOT, POWRÓT, ŁADOWANIE)
-  oraz bezpieczną obsługę sygnału `SIGTERM`, realizowaną przy użyciu
-  zmiennych typu `volatile sig_atomic_t`.
-  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L3-L17
-
-- **Inicjalizacja drona i podłączenie do mechanizmów IPC**  
-  Fragment kodu odpowiedzialny za inicjalizację parametrów drona,
-  podłączenie do pamięci dzielonej, semaforów oraz kolejki komunikatów,
-  a także pobranie globalnych limitów systemowych.
-  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L19-L97
-
-- **Reakcja drona na sygnał ataku samobójczego**  
-  Fragment kodu pokazujący asynchroniczną reakcję drona na sygnał ataku.
-  Dron podejmuje różne decyzje w zależności od aktualnego stanu oraz
-  poziomu naładowania baterii.
-  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L102-L135
-
-- **Stan LOT – patrol i zużycie baterii**  
-  Fragment kodu realizujący logikę lotu drona, stopniowe zużycie baterii
-  oraz decyzję o powrocie do bazy lub zniszczeniu drona w przypadku
-  całkowitego rozładowania.
-  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L138-L171
-
-- **Stan POWRÓT – synchronizacja wejść do bazy**  
-  Fragment kodu odpowiedzialny za bezpieczny powrót drona do bazy.
-  Wykorzystuje kolejki komunikatów jako mechanizm synchronizacji
-  dostępu do dwóch wąskich wejść.
-  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L173-L279
-
-- **Stan ŁADOWANIE – regeneracja energii i utylizacja drona**  
-  Fragment kodu realizujący proces ładowania drona w bazie,
-  zliczanie cykli eksploatacyjnych oraz automatyczną utylizację
-  drona po osiągnięciu limitu Xi.
-  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L281-L320
-
-
+- **Rozbudowa infrastruktury (SIGUSR1)
+  Obsługa sygnału SIGUSR1 zwiększająca maksymalną liczbę platform
+  startowych w systemie.
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L145-L158
  
+- **Redukcja platform i wymuszona eliminacja dronów (SIGUSR2)
+  Handler SIGUSR2 zmniejsza limit dostępnych platform oraz wysyła
+  sygnały SIGTERM do nadmiarowych dronów, blokując SIGCHLD na czas
+  modyfikacji listy procesów.
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L161-L216
+
+- **Bezpieczne zamknięcie systemu
+  Funkcja cleanup() odpowiada za:
+  - zakończenie wszystkich dronów,
+  - zwolnienie semaforów,
+  - usunięcie pamięci dzielonej,
+  - usunięcie kolejki komunikatów.
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L219-L251
+
+- **Inicjalizacja operatora i pętla główna systemu
+  Sekcja main() inicjalizuje mechanizmy IPC, rejestruje obsługę sygnałów,
+  tworzy początkową flotę dronów oraz realizuje główną pętlę sterującą
+  pracą systemu.
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L253-L389
+
+- **Definicje stanów i zmienne globalne
+  Sekcja definiuje:
+  - automat skończony drona (`LOT`, `POWROT`, `LADOWANIE`),
+  - globalne flagi sterowane sygnałami (`atak`, `redukcja`),
+  - zmienną `stan_global` do synchronizacji stanu z handlerem sygnałów.
+
+
+- **Obsługa sygnałów sterujących dronem
+  Handler reaguje na:
+  - SIGUSR1 – rozkaz ataku (warunkowy),
+  - SIGTERM – bezwarunkowa redukcja platformy
+  Sygnały nie kończą procesu bezpośrednio, lecz ustawiają flagi
+  sprawdzane w głównej pętli drona.
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L21-L37
+
+- **Inicjalizacja drona i mechanizmów IPC
+  Sekcja inicjalizuje:
+  - obsługę sygnałów,
+  - generator losowy,
+  - pamięć dzieloną,
+  - semafory,
+  - kolejkę komunikatów (bramki bazy).
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L3-L12
+
+- **Inicjalizacja procesu drona
+  Sekcja odpowiada za:
+  - start procesu drona,
+  - inicjalizację buforów i logów,
+  - konfigurację obsługi sygnałów (`sigaction`),
+  - przygotowanie generatora losowego.
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L39-L59
+
+- **Generowanie parametrów fizycznych drona
+
+  Losowo generowane są:
+  - czas ładowania (`T1`),
+  - maksymalny czas lotu (`T2`),
+  - czas powrotu do bazy (`T_return`),
+  - tempo zużycia baterii (`drain`).
+  Zapewnia to zróżnicowane zachowanie dronów.
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L62-L73
+
+- **Inicjalizacja drona i mechanizmów IPC
+  Sekcja inicjalizuje:
+  - pamięć dzieloną (stan systemu),
+  - semafory (sekcje krytyczne),
+  - kolejkę komunikatów (bramki wejściowe bazy),
+  - pobranie limitów `P` i `XI`.
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L78-L114
+
+- **Obsługa redukcji platformy (SIGTERM)
+  Sekcja realizuje bezwarunkowe usunięcie drona z systemu.
+  Po otrzymaniu sygnału:
+  - aktualizowane są statystyki w pamięci dzielonej,
+  - dron kończy działanie niezależnie od aktualnego stanu.
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L127-L137
+
+- **Reakcja na sygnał ataku
+  Dron reaguje na rozkaz ataku:
+  - jeśli jest w bazie → zostaje zniszczony,
+  - jeśli bateria ≥ 20% → wykonuje atak samobójczy,
+  - jeśli bateria < 20% → ignoruje rozkaz.
+  Decyzja zależy od aktualnego stanu i poziomu energii.
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L140-L173
+
+- **Stan LOT (patrol)
+  Dron:
+  - patroluje przestrzeń,
+  - co sekundę traci energię,
+  - loguje aktualny poziom baterii,
+  - przy ≤20% inicjuje powrót do bazy,
+  - przy 0% ulega zniszczeniu w powietrzu.
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L176-L212
+
+- **Stan POWRÓT – dolot do bazy i próba wejścia
+
+  Sekcja opisuje zachowanie drona w trakcie powrotu do bazy po osiągnięciu
+  krytycznego poziomu baterii.
+
+  W tym stanie:
+  - dron stopniowo traci energię i odlicza pozostały czas dolotu do bazy,
+  - jeśli bateria spadnie do 0%, dron ulega zniszczeniu przed dotarciem,
+  - po dotarciu pod bazę sprawdzana jest dostępność wolnych miejsc,
+  - wejście do bazy odbywa się przez mechanizm bramek oparty o kolejkę komunikatów,
+  - w przypadku zajętych bramek dron krąży nad bazą, tracąc energię,
+  - obsługiwany jest wyścig (race condition), gdy miejsce w bazie zostanie zajęte
+  przez inny dron w trakcie przejścia przez bramkę,
+  - po skutecznym wejściu do bazy następuje przejście do stanu `LADOWANIE`.
+
+  Sekcja kończy się albo zmianą stanu na ładowanie, albo zakończeniem pracy drona
+  w przypadku całkowitego rozładowania.
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L214-L318
+
+
+- **Stan LADOWANIE
+  Dron:
+  - ładuje baterię przez określony czas,
+  - może zostać zniszczony w trakcie ataku,
+  - zwiększa licznik cykli ładowania,
+  - opuszcza bazę po zakończeniu ładowania.
+  Po przekroczeniu limitu `XI` dron zostaje zutylizowany.
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L320-L355
+
+- **Powrót do patrolowania
+  Sekcja resetuje stan drona po ładowaniu
+  i rozpoczyna nowy cykl patrolowy.
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L357-L359
+  
   
 
 
 
-
+  
+  
 
   
