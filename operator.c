@@ -20,7 +20,9 @@ void przekaz_atak(int sig)
     if (wybrany_dron > 0)
     {
         printf("[OPERATOR] Przekazuje rozkaz ataku do wskazanego drona PID=%d\n", wybrany_dron);
-        
+        sprintf(buf, "[OPERATOR] Przekazuje rozkaz ataku do wskazanego drona PID=%d\n", wybrany_dron);
+        log_msg(buf); 
+        buf[0] = '\0';
         // Przeszukiwanie listy aktywnych dronów w celu weryfikacji PID
         int znaleziono = 0; 
         for(int i=0; i<liczba_dronow; i++) 
@@ -64,7 +66,9 @@ void przekaz_atak(int sig)
 void alokacja_dronow()
 {
     if (liczba_dronow < pojemnosc_dronow) // Jeśli jest miejsce, nie rób nic
+    {
         return;
+    }
 
     int nowa = (pojemnosc_dronow == 0) ? 16 : pojemnosc_dronow * 2; // Strategia podwajania rozmiaru
 
@@ -97,7 +101,6 @@ void sprzatnij_drony(int sig)
                 liczba_dronow--; // Zmniejszenie liczby śledzonych procesów
 
                 printf("[OPERATOR] DRON PID=%d USUNIETY Z LISTY\n", pid);
-
                 sprintf(buf, "[OPERATOR] DRON PID=%d USUNIETY Z LISTY\n", pid);
                 log_msg(buf); // Zapisanie zdarzenia do pliku logu
                 buf[0] = '\0';
@@ -117,7 +120,7 @@ void stworz_drona()
     if (pid == -1)
     {
         perror("fork dron");
-        return;
+        exit(1);
     }
 
     if (pid == 0) // Kod procesu potomnego
@@ -185,6 +188,7 @@ void sig_minus(int sig)
     printf("[OPERATOR] !!! REDUKCJA PLATFORM O %d (Nowy limit: %d)\n", do_redukcji, nowy_limit);
     sprintf(buf, "[OPERATOR] !!! REDUKCJA PLATFORM O %d (Nowy limit: %d)\n", do_redukcji, nowy_limit);
     log_msg(buf);
+    buf[0] = '\0';
 
     /* PROCES USYPIANIA NADMIAROWYCH DRONÓW */
     // Blokujemy SIGCHLD, aby tablica drony[] nie zmieniała się w trakcie wysyłania sygnałów
@@ -222,7 +226,7 @@ void cleanup(int sig)
 
     sprintf(buf, "[OPERATOR] ZAKONCZENIE PROGRAMU (sygnal %d)\n", sig);
     log_msg(buf);
-
+    buf[0] = '\0';
     // Pętla kończąca wszystkie aktywne procesy dronów przed zamknięciem systemu
     for (int i = 0; i < liczba_dronow; i++)
     {
@@ -319,11 +323,46 @@ int main()
     int TK = s->Tk;
     semafor_v();
 
-    // Startowa generacja floty dronów (liczba N)
-    for (int i = 0; i < N; i++) 
+    // Zapamiętanie PID procesu operatora (rodzica)
+    pid_t parent_pid = getpid();
+
+    // Startowa generacja floty dronów – tworzymy N procesów potomnych
+    for (int i = 0; i < N; i++)
     {
-        stworz_drona();
+        pid_t pid = fork(); // Utworzenie nowego procesu
+
+        if (pid == -1)
+        {
+            // Błąd tworzenia procesu
+            perror("fork dron");
+            exit(1);
+        }
+
+        if (pid == 0)
+        {
+            // KOD DZIECKA 
+            // Zastąpienie procesu potomnego programem "dron"
+            // Po udanym execl() kod poniżej się już nie wykona
+            execl("./dron", "dron", NULL);
+
+            // Jeśli execl wróci → wystąpił błąd
+            perror("execl dron");
+            exit(1);
+        }
+
+        // Zapewnienie miejsca w dynamicznej tablicy PID-ów dronów. 
+        alokacja_dronow();
+
+        // Zapis PID nowo utworzonego drona w tablicy
+        drony[liczba_dronow++] = pid;
+
     }
+
+    // Aktualizacja liczby aktywnych dronów w pamięci współdzielonej
+    // Sekcja krytyczna zabezpieczona semaforem
+    semafor_p();                  // LOCK
+    s->aktywne_drony += N;        // Dodanie N nowych dronów do systemu
+    semafor_v();                  // UNLOCK
 
     time_t nastepne_uzupelnienie = time(NULL) + TK; // Ustawienie harmonogramu uzupełniania floty
     time_t ostatnia_sekunda_status = 0; // Pomocniczy zegar do logowania statusu
@@ -366,14 +405,16 @@ int main()
             printf("[OPERATOR] STATUS: aktywne=%d baza=%d max=%d\n", aktywne, w_bazie, max);
             sprintf(buf, "[OPERATOR] STATUS: aktywne=%d baza=%d max=%d\n", aktywne, w_bazie, max);
             log_msg(buf);
-
+            buf[0] = '\0';
+            
             // Sprawdzenie limitów: czy mamy wolne platformy i czy baza nie jest przepełniona
             if (aktywne < max && w_bazie < limit_P)
             {
                 printf("[OPERATOR] >>> UZUPELNIANIE: %d -> %d\n", aktywne, aktywne + 1);
                 sprintf(buf, "[OPERATOR] >>> UZUPELNIANIE: %d -> %d\n", aktywne, aktywne + 1);
                 log_msg(buf);
-                
+                buf[0] = '\0';
+
                 semafor_v(); // Zwolnienie semafora przed forkiem
                 stworz_drona();
             }

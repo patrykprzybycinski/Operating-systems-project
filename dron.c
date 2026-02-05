@@ -114,10 +114,8 @@ int main()
     semafor_v();
 
     printf("[DRON %d] START | T1=%ds T2=%ds T_return=%ds drain=%d%%/s\n", getpid(), T1, T2, T_return, drain);
-
     sprintf(buf, "[DRON %d] START | T1=%ds T2=%ds T_return=%ds drain=%d%%/s\n", getpid(), T1, T2, T_return, drain);
     log_msg(buf);
-    buf[0] = '\0';
 
     time_t ostatnia_sekunda = time(NULL); // Zmienna do odmierzania interwałów 1s
     time_t czas_startu_ladowania = 0;
@@ -133,6 +131,8 @@ int main()
             s->aktywne_drony--;
             semafor_v();
             printf("[DRON %d] !!! USUNIĘTY PRZEZ REDUKCJĘ\n", getpid());
+            sprintf(buf, "[DRON %d] !!! USUNIĘTY PRZEZ REDUKCJĘ\n", getpid());
+            log_msg(buf);
             exit(0); // Wyjście z programu drona
         }
         
@@ -257,6 +257,9 @@ int main()
                         {
                             // Obie bramki zajęte - dron musi krążyć kolejną sekundę
                             printf("[DRON %d] !!! WEJŚCIA ZAJĘTE - KRĄŻĘ (bateria: %d%%)\n", getpid(), bateria);
+                            sprintf(buf, "[DRON %d] !!! WEJŚCIA ZAJĘTE - KRĄŻĘ (bateria: %d%%)\n", getpid(), bateria);
+                            log_msg(buf);
+
                             continue; 
                         } 
                         else 
@@ -268,6 +271,8 @@ int main()
 
                     long nr_wejscia = m.mtype; // Pobranie numeru bramki, którą dron wchodzi
                     printf("[DRON %d] >>> PRZECHODZE PRZEZ WEJSCIE %ld\n", getpid(), nr_wejscia);
+                    sprintf(buf, "[DRON %d] >>> PRZECHODZE PRZEZ WEJSCIE %ld\n", getpid(), nr_wejscia);
+                    log_msg(buf);
 
                     sleep(1); // Czas fizycznego przelotu przez bramkę
 
@@ -315,6 +320,8 @@ int main()
                         s->aktywne_drony--;
                         semafor_v();
                         printf("[DRON %d] !!! ROZBITTY POD BAZĄ (0%% Baterii)\n", getpid());
+                        sprintf(buf, "[DRON %d] !!! ROZBITTY POD BAZĄ (0%% Baterii)\n", getpid());
+                        log_msg(buf);
                         exit(0);
                     }
                 }
