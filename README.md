@@ -286,6 +286,7 @@ N  = 2000   (liczba dronów)
 P  = 2      (pojemność bazy)
 Tk = 1      (czas uzupełniania)
 Xi = 2      (limit ładowań)
+
 Komenda użyta do przeprowadzenia testu:
 ## watch -n 0.3 "grep SHM system.log | tail -n 20"
 
