@@ -293,33 +293,34 @@ Test potwierdza:
   Handler sygnału SIGWINCH odpowiada za przekazanie rozkazu ataku
   do konkretnego drona wskazanego przez Dowódcę w pamięci dzielonej.
   Operator weryfikuje istnienie PID-u przed wysłaniem sygnału.
-  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L11-L61
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L11-L63
   
 - **Dynamiczna lista aktywnych dronów**
   Funkcja realizuje bezpieczne powiększanie tablicy PID-ów dronów
   z użyciem strategii podwajania rozmiaru i realloc().
-  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L64-L80
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L66-L84
 
 - **Obsługa SIGCHLD i eliminacja procesów zombie**
   Handler SIGCHLD usuwa zakończone procesy dronów z listy operatora
   przy użyciu waitpid() z flagą WNOHANG, zapobiegając powstawaniu zombie.
-  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L83-L109
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L87-L112
 
 - **Tworzenie nowego procesu drona**
   Funkcja odpowiedzialna za tworzenie nowego drona przy pomocy fork()
   i execl(), rejestrację PID-u oraz aktualizację stanu systemu.
-  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L112-L142
+  Funckcja ta jest wywoływana tylko przy uzupełnianiu brakujących dronów przez operatora co Tk sekund.
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L115-L145
 
 - **Rozbudowa infrastruktury (SIGUSR1)**
   Obsługa sygnału SIGUSR1 zwiększająca maksymalną liczbę platform
   startowych w systemie.
-  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L145-L158
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L148-L161
  
 - **Redukcja platform i wymuszona eliminacja dronów (SIGUSR2)**
   Handler SIGUSR2 zmniejsza limit dostępnych platform oraz wysyła
   sygnały SIGTERM do nadmiarowych dronów, blokując SIGCHLD na czas
   modyfikacji listy procesów.
-  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L161-L216
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L164-L220
 
 - **Bezpieczne zamknięcie systemu**
   Funkcja cleanup() odpowiada za:
@@ -327,20 +328,20 @@ Test potwierdza:
   - zwolnienie semaforów,
   - usunięcie pamięci dzielonej,
   - usunięcie kolejki komunikatów.
-  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L219-L251
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L223-L255
 
 - **Inicjalizacja operatora i pętla główna systemu**
   Sekcja main() inicjalizuje mechanizmy IPC, rejestruje obsługę sygnałów,
   tworzy początkową flotę dronów oraz realizuje główną pętlę sterującą
   pracą systemu.
-  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L253-L389
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/operator.c#L257-L430
 
 - **Definicje stanów i zmienne globalne**
   Sekcja definiuje:
   - automat skończony drona (`LOT`, `POWROT`, `LADOWANIE`),
   - globalne flagi sterowane sygnałami (`atak`, `redukcja`),
   - zmienną `stan_global` do synchronizacji stanu z handlerem sygnałów.
-
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L1-L12
 
 - **Obsługa sygnałów sterujących dronem**
   Handler reaguje na:
@@ -349,15 +350,6 @@ Test potwierdza:
   Sygnały nie kończą procesu bezpośrednio, lecz ustawiają flagi
   sprawdzane w głównej pętli drona.
   https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L21-L37
-
-- **Inicjalizacja drona i mechanizmów IPC**
-  Sekcja inicjalizuje:
-  - obsługę sygnałów,
-  - generator losowy,
-  - pamięć dzieloną,
-  - semafory,
-  - kolejkę komunikatów (bramki bazy).
-  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L3-L12
 
 - **Inicjalizacja procesu drona**
   Sekcja odpowiada za:
@@ -423,7 +415,7 @@ Test potwierdza:
 
   Sekcja kończy się albo zmianą stanu na ładowanie, albo zakończeniem pracy drona
   w przypadku całkowitego rozładowania.
-  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L214-L318
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L214-L329
 
 
 - **Stan LADOWANIE**
@@ -433,12 +425,12 @@ Test potwierdza:
   - zwiększa licznik cykli ładowania,
   - opuszcza bazę po zakończeniu ładowania.
   Po przekroczeniu limitu `XI` dron zostaje zutylizowany.
-  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L320-L355
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L331-L366
 
 - **Powrót do patrolowania**
   Sekcja resetuje stan drona po ładowaniu
   i rozpoczyna nowy cykl patrolowy.
-  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L357-L359
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L368-L370
   
   
 
