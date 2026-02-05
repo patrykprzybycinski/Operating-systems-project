@@ -268,6 +268,27 @@ Test potwierdza:
 
 ![Test 7](test7.png)
 
+### Test 8 — Synchronizacja pamięci dzielonej
+
+Test polegał na sprawdzeniu poprawności działania pamięci dzielonej współdzielonej przez proces Operatora oraz wiele procesów dronów.  
+Podczas symulacji wiele procesów jednocześnie odczytywało i modyfikowało wspólne zmienne systemowe, takie jak liczba aktywnych dronów oraz liczba dronów w bazie.
+
+Dostęp do pamięci dzielonej zabezpieczono semaforem binarnym, aby zapobiec jednoczesnym zapisom i warunkom wyścigu.  
+W trakcie działania systemu monitorowano zmiany wartości w strukturze współdzielonej, potwierdzając ich spójność nawet przy dużej liczbie równolegle działających procesów.
+
+Test potwierdził:
+- poprawną synchronizację dostępu do pamięci dzielonej,
+- brak niespójności danych przy wielu procesach,
+- stabilną pracę systemu przy dużym obciążeniu.
+
+Parametry symulacji:
+N  = 2000   (liczba dronów)
+P  = 2      (pojemność bazy)
+Tk = 1      (czas uzupełniania)
+Xi = 2      (limit ładowań)
+
+![Test 8](test8.png)
+
 ## 7. Linki do najważniejszych fragmentów kodu.
 
 - **Konfiguracja systemu i inicjalizacja mechanizmów IPC**  
