@@ -439,7 +439,7 @@ Komenda użyta do przeprowadzenia testu:
 
   Sekcja kończy się albo zmianą stanu na ładowanie, albo zakończeniem pracy drona
   w przypadku całkowitego rozładowania.
-  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L214-L329
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L215-L350
 
 
 - **Stan LADOWANIE**
@@ -449,12 +449,12 @@ Komenda użyta do przeprowadzenia testu:
   - zwiększa licznik cykli ładowania,
   - opuszcza bazę po zakończeniu ładowania.
   Po przekroczeniu limitu `XI` dron zostaje zutylizowany.
-  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L331-L366
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L354-L403
 
 - **Powrót do patrolowania**
   Sekcja resetuje stan drona po ładowaniu
   i rozpoczyna nowy cykl patrolowy.
-  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L368-L370
+  https://github.com/patrykprzybycinski/Operating-systems-project/blob/main/dron.c#L405-L407
   
   
 
