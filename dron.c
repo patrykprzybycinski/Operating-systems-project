@@ -60,7 +60,7 @@ int main()
 
     /* Generowanie unikalnych parametrów fizycznych drona */
     int T1 = (rand() % 34) + 7;          // Czas ładowania (7-40s)
-    int T2 = (int)(2.5 * T1);            // Czas lotu na pełnej baterii (17-100s)
+    int T2 =  (int)(2.5 * T1);           // Czas lotu na pełnej baterii (17-100s)
     int T_return = (int)(0.2 * T2);      // Czas potrzebny na powrót do bazy
     if (T_return < 1) T_return = 1;
 
@@ -100,7 +100,8 @@ int main()
     }
 
     msg_id = msgget(key_q, 0); // Podłączenie do kolejki stworzonej przez Operatora
-    if (msg_id == -1) {
+    if (msg_id == -1) 
+    {
         perror("msgget dron");
         exit(1);
     }
@@ -211,122 +212,144 @@ int main()
             }
         }
         /* LOGIKA STANU: POWRÓT DO BAZY */
-        else if (stan == POWROT) 
+        else if (stan == POWROT)
         {
-            bateria -= drain; // Dron nadal zużywa energię wracając
-            powrot_pozostalo--; // Zbliżanie się do bazy
+            /* LOT POWROTNY DO BAZY */
 
-            if (bateria < 0) bateria = 0;
-
-            printf("[DRON %d] POWROT | bateria=%d%% | pozostalo=%ds\n", getpid(), bateria, powrot_pozostalo);
-            sprintf(buf, "[DRON %d] POWROT | bateria=%d%% | pozostalo=%ds\n", getpid(), bateria, powrot_pozostalo);
-            log_msg(buf);
-
-            if (bateria <= 0) // Rozładowanie tuż przed bazą
+            if (powrot_pozostalo > 0)  // jeszcze w drodze
             {
-                semafor_p();
-                s->aktywne_drony--;
-                semafor_v();
-
-                printf("[DRON %d] !!! ZNISZCZONY W TRAKCIE POWROTU\n", getpid());
-                sprintf(buf, "[DRON %d] !!! ZNISZCZONY W TRAKCIE POWROTU\n", getpid());
-                log_msg(buf);
-                exit(0);
-            }
-
-            if (powrot_pozostalo <= 0) // Dron dotarł pod bramę bazy
-            {
-                int mozna_wejsc = 0;
-
-                semafor_p(); // Sprawdzenie ogólnej dostępności miejsc w bazy
-                if (s->drony_w_bazie < s->P) 
+                if (teraz > ostatnia_sekunda)  // aktualizacja co sekundę
                 {
-                    mozna_wejsc = 1;
-                }
-                semafor_v();
+                    bateria -= drain;
+                    powrot_pozostalo--;
 
-                if (mozna_wejsc) 
-                {
-                    /* MECHANIZM WĄSKIEGO GARDŁA (Kolejka komunikatów jako bramki) */
-                    struct msg_wejscie m;
-                    
-                    // Próba pobrania żetonu (wejścia). IPC_NOWAIT sprawia, że dron nie stoi w miejscu
-                    if (msgrcv(msg_id, &m, sizeof(int), 0, IPC_NOWAIT) == -1) 
-                    {
-                        if (errno == ENOMSG) 
-                        {
-                            // Obie bramki zajęte - dron musi krążyć kolejną sekundę
-                            printf("[DRON %d] !!! WEJŚCIA ZAJĘTE - KRĄŻĘ (bateria: %d%%)\n", getpid(), bateria);
-                            sprintf(buf, "[DRON %d] !!! WEJŚCIA ZAJĘTE - KRĄŻĘ (bateria: %d%%)\n", getpid(), bateria);
-                            log_msg(buf);
+                    if (bateria < 0) bateria = 0;
 
-                            continue; 
-                        } 
-                        else 
-                        {
-                            perror("Błąd msgrcv");
-                            continue;
-                        }
-                    }
-
-                    long nr_wejscia = m.mtype; // Pobranie numeru bramki, którą dron wchodzi
-                    printf("[DRON %d] >>> PRZECHODZE PRZEZ WEJSCIE %ld\n", getpid(), nr_wejscia);
-                    sprintf(buf, "[DRON %d] >>> PRZECHODZE PRZEZ WEJSCIE %ld\n", getpid(), nr_wejscia);
+                    printf("[DRON %d] POWROT | bateria=%d%% | pozostalo=%ds\n",getpid(), bateria, powrot_pozostalo);
+                    sprintf(buf,"[DRON %d] POWROT | bateria=%d%% | pozostalo=%ds\n", getpid(), bateria, powrot_pozostalo);
                     log_msg(buf);
 
-                    sleep(1); // Czas fizycznego przelotu przez bramkę
-
-                    semafor_p(); // LOCK - ostateczna aktualizacja stanu bazy
-                    if (s->drony_w_bazie < s->P) 
-                    {
-                        s->drony_w_bazie++;// Oficjalne zajęcie miejsca w bazie
-                        
-                        stan = LADOWANIE;
-                        stan_global = LADOWANIE;
-                        semafor_v(); // UNLOCK
-
-                        // Zwolnienie bramki (żetonu) dla innych dronów
-                        m.mtype = nr_wejscia;
-                        m.dron_pid = getpid();
-                        msgsnd(msg_id, &m, sizeof(int), 0);
-
-                        printf("[DRON %d] >>> DOTARL DO BAZY (Wejscie %ld)\n", getpid(), nr_wejscia);
-                        sprintf(buf, "[DRON %d] >>> DOTARL DO BAZY (Wejscie %ld)\n", getpid(), nr_wejscia);
-                        log_msg(buf);
-
-                    }
-                    else 
-                    {
-                        // Wyścig (Race Condition): inny dron zajął miejsce, gdy my lecieliśmy bramką
-                        semafor_v();
-                        
-                        // Oddajemy żeton bramki i wracamy do krążenia
-                        m.mtype = nr_wejscia;
-                        msgsnd(msg_id, &m, sizeof(int), 0);
-                        
-                        printf("[DRON %d] !!! BAZA ZAPEŁNIONA W OSTATNIEJ CHWILI - KRĄŻĘ DALEJ\n", getpid());
-                    }
+                    ostatnia_sekunda = teraz;
                 }
-                else 
+
+                if (bateria <= 0)  // rozładował się w locie
                 {
-                    // Brak miejsc w pamięci dzielonej - dron krąży i traci baterię
-                    printf("[DRON %d] !!! BRAK MIEJSC W BAZIE - OCZEKIWANIE (Bateria: %d%%)\n", getpid(), bateria);
-                    
-                    bateria -= drain;  // Utrata baterii przy krążeniu nad bazą
-                    
-                    if (bateria <= 0) 
+                    semafor_p();
+                    s->aktywne_drony--;
+                    semafor_v();
+
+                    printf("[DRON %d] !!! ZNISZCZONY W TRAKCIE POWROTU\n", getpid());
+                    sprintf(buf, "[DRON %d] !!! ZNISZCZONY W TRAKCIE POWROTU\n", getpid());
+                    log_msg(buf);
+                    exit(0);
+                }
+
+                continue;
+            }
+
+            /* STOI POD BAZĄ I PRÓBUJE WEJŚĆ */
+
+            int mozna_wejsc = 0;
+
+            semafor_p();
+            if (s->drony_w_bazie < s->P)  // sprawdź czy jest miejsce w bazie
+                mozna_wejsc = 1;
+            semafor_v();
+
+            if (!mozna_wejsc)  // baza pełna → krąży
+            {
+                if (teraz > ostatnia_sekunda)
+                {
+                    printf("[DRON %d] !!! BAZA PEŁNA — KRĄŻĘ (bateria=%d%%)\n", getpid(), bateria);
+
+                    sprintf(buf, "[DRON %d] !!! BAZA PEŁNA — KRĄŻĘ (bateria=%d%%)\n", getpid(), bateria);
+                    log_msg(buf);
+
+                    bateria -= drain;
+                    if (bateria < 0) bateria = 0;
+
+                    ostatnia_sekunda = teraz;
+                }
+
+                if (bateria <= 0)  // padł krążąc
+                {
+                    semafor_p();
+                    s->aktywne_drony--;
+                    semafor_v();
+
+                    printf("[DRON %d] !!! ROZBITTY POD BAZĄ\n", getpid());
+                    sprintf(buf, "[DRON %d] !!! ROZBITTY POD BAZĄ\n", getpid());
+                    log_msg(buf);
+                    exit(0);
+                }
+
+                continue;
+            }
+
+            /* PRÓBA ZAJĘCIA WEJŚCIA DO BAZY */
+
+            struct msg_wejscie m;
+
+            if (msgrcv(msg_id, &m, sizeof(int), 0, IPC_NOWAIT) == -1)
+            {
+                if (errno == ENOMSG)  // brak wolnego wejścia
+                {
+                    if (teraz > ostatnia_sekunda)
                     {
-                        semafor_p();
-                        s->aktywne_drony--;
-                        semafor_v();
-                        printf("[DRON %d] !!! ROZBITTY POD BAZĄ (0%% Baterii)\n", getpid());
-                        sprintf(buf, "[DRON %d] !!! ROZBITTY POD BAZĄ (0%% Baterii)\n", getpid());
+                        printf("[DRON %d] !!! WEJŚCIA ZAJĘTE — KRĄŻĘ (bateria=%d%%)\n", getpid(), bateria);
+                        sprintf(buf,"[DRON %d] !!! WEJŚCIA ZAJĘTE — KRĄŻĘ (bateria=%d%%)\n", getpid(), bateria);
                         log_msg(buf);
-                        exit(0);
+
+                        bateria -= drain;
+                        if (bateria < 0) bateria = 0;
+
+                        ostatnia_sekunda = teraz;
                     }
+                    continue;
+                }
+                else
+                {
+                    perror("msgrcv");
+                    continue;
                 }
             }
+
+            long nr_wejscia = m.mtype;  // dostał numer wejścia
+
+            printf("[DRON %d] >>> JESTEM PRZED WEJŚCIEM %ld\n", getpid(), nr_wejscia);
+            sprintf(buf, "[DRON %d] >>> JESTEM PRZED WEJŚCIEM %ld\n", getpid(), nr_wejscia);
+            log_msg(buf);
+
+            semafor_p();
+            if (s->drony_w_bazie < s->P)  // ostatnia kontrola miejsca
+            {
+                s->drony_w_bazie++;
+                stan = LADOWANIE;
+                stan_global = LADOWANIE;
+                semafor_v();
+
+                m.mtype = nr_wejscia;
+                m.dron_pid = getpid();
+                msgsnd(msg_id, &m, sizeof(int), 0);
+
+                printf("[DRON %d] >>> DOTARL DO BAZY (Wejscie %ld)\n", getpid(), nr_wejscia);
+                sprintf(buf, "[DRON %d] >>> DOTARL DO BAZY (Wejscie %ld)\n", getpid(), nr_wejscia);
+                log_msg(buf);
+            }
+            else  // baza zapełniła się w ostatniej chwili
+            {
+                semafor_v();
+
+                m.mtype = nr_wejscia;
+                msgsnd(msg_id, &m, sizeof(int), 0);
+
+                printf("[DRON %d] !!! BAZA ZAPEŁNIONA W OSTATNIEJ CHWILI — KRĄŻĘ\n", getpid());
+                sprintf(buf,"[DRON %d] !!! BAZA ZAPEŁNIONA W OSTATNIEJ CHWILI — KRĄŻĘ\n", getpid());
+                log_msg(buf);
+            }
         }
+
+
         /* LOGIKA STANU: ŁADOWANIE ENERGII */
         else if (stan == LADOWANIE) 
         {
@@ -334,20 +357,34 @@ int main()
             sprintf(buf, "[DRON %d] <<< LADOWANIE (%ds)\n", getpid(), T1);
             log_msg(buf);
 
-            // sleep() zwraca czas, który pozostał, jeśli został przerwany sygnałem
-            unsigned int left = sleep(T1);
-            
-            if (left > 0 && atak) // Jeśli atak nastąpił w trakcie ładowania
-            {
-                continue; // Skok do początku pętli, gdzie obsłużymy flagę 'atak'
-            }
-
             bateria = 100; // Akumulator pełny
             ladowania++; // Zwiększenie licznika zużycia drona
 
-            semafor_p(); // Opuszczenie bazy - sekcja krytyczna
+            struct msg_wejscie m;
+
+            printf("[DRON %d] CZEKA NA WYLOT Z BAZY...\n", getpid());
+
+            if (msgrcv(msg_id, &m, sizeof(int), 0, 0) == -1) 
+            {
+                perror("msgrcv wylot");
+                continue;
+            }
+
+            long nr_wejscia = m.mtype;
+
+            printf("[DRON %d] >>> WYLOT PRZEZ WEJSCIE %ld\n", getpid(), nr_wejscia);
+            sprintf(buf, "[DRON %d] >>> WYLOT PRZEZ WEJSCIE %ld\n", getpid(), nr_wejscia);
+            log_msg(buf);
+
+            /* opuszczenie bazy */
+            semafor_p();
             s->drony_w_bazie--;
             semafor_v();
+
+            /* oddanie bramki */
+            m.mtype = nr_wejscia;
+            m.dron_pid = getpid();
+            msgsnd(msg_id, &m, sizeof(int), 0);
 
             printf("[DRON %d] <<< WYLOT Z BAZY | bateria=100%% | ladowania=%d\n", getpid(), ladowania);
             sprintf(buf, "[DRON %d] <<< WYLOT Z BAZY | bateria=100%% | ladowania=%d\n", getpid(), ladowania);

@@ -400,6 +400,12 @@ int main()
             int max = s->max_drony;
             int w_bazie = s->drony_w_bazie;
             int limit_P = s->P;
+            semafor_v();
+
+            printf("[SHM TEST] aktywne=%d | baza=%d | max=%d\n", aktywne, w_bazie, max);
+            sprintf(buf, "[SHM TEST] aktywne=%d | baza=%d | max=%d\n", aktywne, w_bazie, max);
+            log_msg(buf);
+            buf[0] = '\0';
 
             // Wyświetlenie aktualnego stanu zasobów w konsoli i logach
             printf("[OPERATOR] STATUS: aktywne=%d baza=%d max=%d\n", aktywne, w_bazie, max);
@@ -415,12 +421,7 @@ int main()
                 log_msg(buf);
                 buf[0] = '\0';
 
-                semafor_v(); // Zwolnienie semafora przed forkiem
                 stworz_drona();
-            }
-            else
-            {
-                semafor_v(); // Zwolnienie jeśli nie tworzymy drona
             }
 
             nastepne_uzupelnienie = teraz; // Aktualizacja czasu następnej próby
